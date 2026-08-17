@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: rx35-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DEVICE_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # Fournisseur de l'assistant IA : "gemini" (gratuit) ou "claude".
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      # sync: false = à saisir dans le tableau de bord Render, jamais dans le code.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SENTINEL_HUB_CLIENT_ID
+        sync: false
+      - key: SENTINEL_HUB_CLIENT_SECRET
+        sync: false

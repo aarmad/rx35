@@ -1,0 +1,31 @@
+# --- Secrets : ne JAMAIS committer ---
+# Contiennent les clés Gemini/Anthropic, le JWT_SECRET et la clé du boîtier.
+.env
+.env.local
+*.env
+!.env.example
+
+# --- Dépendances ---
+node_modules/
+
+# --- Backend ---
+rx35-backend/dist/
+# Base JSON locale + photos envoyées par le boîtier : données d'exécution,
+# régénérées automatiquement au démarrage.
+rx35-backend/data/
+
+# --- Application mobile ---
+rx35-app/.expo/
+rx35-app/dist/
+# Projet natif régénérable par `npx expo prebuild`.
+rx35-app/android/
+rx35-app/ios/
+# Clés de signature Android : à conserver hors du dépôt, leur perte empêche
+# toute mise à jour de l'app publiée.
+*.keystore
+*.jks
+
+# --- Divers ---
+*.log
+.DS_Store
+Thumbs.db

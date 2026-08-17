@@ -1,0 +1,64 @@
+{
+  // Tâches de lancement RX35 — Terminal > Exécuter la tâche… (Ctrl+Maj+P → "Run Task")
+  //
+  // « RX35 : tout lancer » démarre le backend ET l'application côté à côté.
+  // Le terminal de l'app est interactif : le QR code Expo s'y affiche, et les
+  // raccourcis Expo (a = Android, r = recharger, ? = aide) y fonctionnent.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "RX35 : backend",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/rx35-backend" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "group": "rx35",
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "RX35 : application (Expo)",
+      "type": "shell",
+      "command": "npx expo start",
+      "options": { "cwd": "${workspaceFolder}/rx35-app" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "group": "rx35",
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "RX35 : application (Expo, émulateur Android)",
+      "type": "shell",
+      "command": "npx expo start --android",
+      "options": { "cwd": "${workspaceFolder}/rx35-app" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "group": "rx35",
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "RX35 : tout lancer",
+      "dependsOn": ["RX35 : backend", "RX35 : application (Expo)"],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "RX35 : vérifier les types (backend + app)",
+      "type": "shell",
+      "command": "npm --prefix rx35-backend run typecheck; npm --prefix rx35-app run typecheck",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": ["$tsc"],
+      "presentation": { "panel": "dedicated" }
+    }
+  ]
+}

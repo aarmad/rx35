@@ -1,0 +1,21 @@
+{
+  // Débogage RX35 — panneau « Exécuter et déboguer » (Ctrl+Maj+D), puis F5.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Lance le backend avec les points d'arrêt actifs directement dans les
+      // fichiers .ts (routes, services, store) : F9 sur une ligne, puis F5.
+      // Pas de rechargement automatique ici, contrairement à `npm run dev` —
+      // utilisez la tâche « RX35 : backend » pour le développement courant,
+      // et cette configuration quand vous voulez inspecter une requête.
+      "name": "RX35 : backend (points d'arrêt)",
+      "type": "node",
+      "request": "launch",
+      "runtimeArgs": ["-r", "ts-node/register"],
+      "program": "${workspaceFolder}/rx35-backend/src/index.ts",
+      "cwd": "${workspaceFolder}/rx35-backend",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

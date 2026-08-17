@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "RX35",
+    "slug": "rx35-app",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#1F3B2C"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.rxstack.rx35",
+      "adaptiveIcon": {
+        "backgroundColor": "#1F3B2C"
+      }
+    },
+    "plugins": [
+      [
+        "@jamsch/expo-speech-recognition",
+        {
+          "microphonePermission": "RX35 utilise le micro pour vous permettre de dicter vos questions à l'assistant.",
+          "speechRecognitionPermission": "RX35 utilise la reconnaissance vocale pour transcrire vos questions."
+        }
+      ]
+    ]
+  }
+}

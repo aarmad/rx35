@@ -29,3 +29,6 @@ rx35-app/ios/
 *.log
 .DS_Store
 Thumbs.db
+
+# APK generes (trop volumineux pour le depot)
+*.apk

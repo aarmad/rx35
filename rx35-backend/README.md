@@ -48,13 +48,29 @@ dépôt Git, adapté à Node.js.
 
 ### Étapes
 
-1. Poussez ce dossier (`rx35-backend`) sur un dépôt GitHub/GitLab.
-2. Sur [render.com](https://render.com), créez un compte puis "New +" →
-   "Blueprint", et pointez vers votre dépôt — le fichier `render.yaml`
-   fourni ici configure tout automatiquement (build, démarrage, port,
-   `healthCheckPath`). À défaut, créez un "Web Service" manuellement avec :
-   - Build command : `npm install && npm run build`
-   - Start command : `npm start`
+1. Poussez le dépôt sur GitHub (le dépôt contient `rx35-app` **et**
+   `rx35-backend`, d'où le réglage « Root Directory » ci-dessous).
+2. Sur [render.com](https://render.com) : **New → Web Service**, choisissez
+   le dépôt, puis renseignez :
+
+   | Champ | Valeur |
+   | --- | --- |
+   | Root Directory | `rx35-backend` ← **indispensable**, le dépôt a deux projets |
+   | Build Command | `npm install && npm run build` |
+   | Start Command | `npm start` |
+   | Health Check Path | `/health` (section Advanced) |
+   | Instance Type | Free |
+
+   Ne définissez **pas** `PORT` : Render l'injecte, et `src/index.ts` le lit
+   déjà (`process.env.PORT`).
+
+   Variables d'environnement à saisir : `AI_PROVIDER`, `GEMINI_API_KEY`,
+   `GEMINI_MODEL`, `DEVICE_API_KEY` (la même que dans le firmware) et
+   `JWT_SECRET` (valeur longue et aléatoire, ex. `openssl rand -hex 32`).
+
+   L'option « Blueprint » (lecture automatique de `render.yaml`) n'est pas
+   proposée sur tous les comptes ; la création manuelle ci-dessus donne
+   exactement le même résultat.
 3. Renseignez les variables d'environnement demandées dans le tableau de
    bord Render (`DEVICE_API_KEY`, `ANTHROPIC_API_KEY`, et éventuellement
    `SENTINEL_HUB_CLIENT_ID`/`SECRET`) — `JWT_SECRET` est généré

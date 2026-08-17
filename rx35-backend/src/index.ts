@@ -13,6 +13,7 @@ import { photosRouter, photosUploadDir } from "./routes/photos";
 import { weatherRouter } from "./routes/weather";
 import { satelliteRouter } from "./routes/satellite";
 import { assistantRouter } from "./routes/assistant";
+import { currentProvider } from "./services/aiProvider";
 
 const app = express();
 app.use(cors());
@@ -37,9 +38,17 @@ app.use((_req, res) => res.status(404).json({ error: "Route inconnue." }));
 const PORT = Number(process.env.PORT ?? 3000);
 app.listen(PORT, () => {
   console.log(`RX35 backend démarré sur http://localhost:${PORT}`);
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn("⚠ ANTHROPIC_API_KEY absente : l'assistant IA (chat + diagnostic photo) renverra une erreur 502.");
+
+  // L'assistant peut tourner sur Gemini ou sur Claude (voir
+  // services/aiProvider.ts) : on n'avertit que sur la clé réellement
+  // utilisée, sinon le message induit en erreur dans les logs Render.
+  const provider = currentProvider();
+  console.log(`Assistant IA : ${provider}${provider === "gemini" ? ` (${process.env.GEMINI_MODEL ?? "gemini-3.5-flash"})` : ""}`);
+  const cleAttendue = provider === "claude" ? "ANTHROPIC_API_KEY" : "GEMINI_API_KEY";
+  if (!process.env[cleAttendue]) {
+    console.warn(`⚠ ${cleAttendue} absente : l'assistant IA (chat + diagnostic photo) renverra une erreur 502.`);
   }
+
   if (!process.env.JWT_SECRET) {
     console.warn("⚠ JWT_SECRET absente : l'authentification (register/login) échouera tant qu'elle n'est pas définie.");
   }

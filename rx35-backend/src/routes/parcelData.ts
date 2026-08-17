@@ -1,0 +1,243 @@
+// ============================================================
+// Données d'une parcelle, lues par l'application.
+//
+// Monté sur /api/parcels/:parcelId derrière requireParcelAccess : à ce
+// stade req.parcelId et req.role sont garantis.
+// ============================================================
+import { Router } from "express";
+import crypto from "crypto";
+import multer from "multer";
+import {
+  getLatestSensorSnapshot,
+  getSensorHistory,
+  getLatestNpkSnapshot,
+  getAlerts,
+  markAlertRead,
+  getUnreadAlertCount,
+  getPhotos,
+  getPhotoNear,
+  getCommands,
+  setIrrigationMode,
+  setPumpManual,
+  getChatHistory,
+  addChatMessage,
+  getParcel,
+  ChatMessage,
+} from "../db/store";
+import { requireRole } from "../middleware/auth";
+import { fetchWeather } from "../services/weatherService";
+import { getNdviSnapshot, getAvailableNdviDates } from "../services/satelliteService";
+import { askAssistant, diagnosePhoto } from "../services/aiProvider";
+
+// mergeParams : sans cela, :parcelId du routeur parent est invisible ici.
+export const parcelDataRouter = Router({ mergeParams: true });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+
+// --- Capteurs ---
+parcelDataRouter.get("/sensors/latest", async (req, res, next) => {
+  try {
+    const snapshot = await getLatestSensorSnapshot(req.parcelId!);
+    if (!snapshot) return res.status(404).json({ error: "Aucune donnée reçue du boîtier pour l'instant." });
+    res.json(snapshot);
+  } catch (e) {
+    next(e);
+  }
+});
+
+parcelDataRouter.get("/sensors/history", async (req, res, next) => {
+  try {
+    const period = Number(req.query.period ?? 7);
+    const since = Date.now() / 1000 - period * 86400;
+    res.json(await getSensorHistory(req.parcelId!, since));
+  } catch (e) {
+    next(e);
+  }
+});
+
+parcelDataRouter.get("/npk/latest", async (req, res, next) => {
+  try {
+    const snapshot = await getLatestNpkSnapshot(req.parcelId!);
+    if (!snapshot) return res.status(404).json({ error: "Aucune donnée NPK reçue pour l'instant." });
+    res.json(snapshot);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Irrigation ---
+parcelDataRouter.get("/irrigation/state", async (req, res, next) => {
+  try {
+    const c = await getCommands(req.parcelId!);
+    res.json({ mode: c.irrigationMode, pumpManualOn: c.pumpManualOn });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Un observateur consulte mais ne pilote pas la pompe.
+parcelDataRouter.put("/irrigation/mode", requireRole("proprietaire", "membre"), async (req, res, next) => {
+  const mode = req.body?.mode;
+  if (mode !== "auto" && mode !== "manuel") {
+    return res.status(400).json({ error: "mode doit être 'auto' ou 'manuel'." });
+  }
+  try {
+    res.json(await setIrrigationMode(req.parcelId!, mode, req.userId!));
+  } catch (e) {
+    next(e);
+  }
+});
+
+parcelDataRouter.put("/irrigation/pump", requireRole("proprietaire", "membre"), async (req, res, next) => {
+  try {
+    res.json(await setPumpManual(req.parcelId!, !!req.body?.on, req.userId!));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Alertes (état "lu" propre à chaque membre) ---
+parcelDataRouter.get("/alerts", async (req, res, next) => {
+  try {
+    res.json(await getAlerts(req.parcelId!, req.userId!));
+  } catch (e) {
+    next(e);
+  }
+});
+
+parcelDataRouter.get("/alerts/unread-count", async (req, res, next) => {
+  try {
+    res.json({ count: await getUnreadAlertCount(req.parcelId!, req.userId!) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+parcelDataRouter.put("/alerts/:alertId/read", async (req, res, next) => {
+  try {
+    await markAlertRead(req.params.alertId, req.userId!);
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Photos ---
+parcelDataRouter.get("/photos", async (req, res, next) => {
+  try {
+    res.json(await getPhotos(req.parcelId!));
+  } catch (e) {
+    next(e);
+  }
+});
+
+parcelDataRouter.get("/photos/near", async (req, res, next) => {
+  const ts = Number(req.query.timestamp);
+  if (!ts) return res.status(400).json({ error: "Paramètre 'timestamp' (epoch) requis." });
+  const tolerance = Number(req.query.tolerance);
+  try {
+    const photo = await getPhotoNear(
+      req.parcelId!,
+      ts,
+      Number.isFinite(tolerance) && tolerance > 0 ? tolerance : undefined
+    );
+    if (!photo) return res.status(404).json({ error: "Aucune photo proche de cet horodatage." });
+    res.json(photo);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Météo et satellite : dépendent des coordonnées de LA parcelle ---
+parcelDataRouter.get("/weather", async (req, res, next) => {
+  try {
+    const parcel = await getParcel(req.parcelId!);
+    res.json(await fetchWeather(parcel!.latitude, parcel!.longitude));
+  } catch (err) {
+    console.error("[weather]", err);
+    res.status(502).json({ error: "Service météo indisponible pour le moment." });
+  }
+});
+
+parcelDataRouter.get("/satellite/dates", (_req, res) => {
+  res.json(getAvailableNdviDates());
+});
+
+parcelDataRouter.get("/satellite/ndvi", async (req, res, next) => {
+  const date = String(req.query.date ?? getAvailableNdviDates()[0]);
+  try {
+    const parcel = await getParcel(req.parcelId!);
+    res.json(await getNdviSnapshot(parcel!.latitude, parcel!.longitude, date));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Assistant IA (conversation propre à chaque membre) ---
+parcelDataRouter.get("/assistant/history", async (req, res, next) => {
+  try {
+    res.json(await getChatHistory(req.parcelId!, req.userId!));
+  } catch (e) {
+    next(e);
+  }
+});
+
+parcelDataRouter.post("/assistant/message", async (req, res, next) => {
+  const text = req.body?.text;
+  if (typeof text !== "string" || !text.trim()) {
+    return res.status(400).json({ error: "Champ 'text' requis." });
+  }
+  try {
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", text, timestamp: Date.now() / 1000 };
+    await addChatMessage(req.parcelId!, req.userId!, userMsg);
+
+    const [parcel, snapshot, history] = await Promise.all([
+      getParcel(req.parcelId!),
+      getLatestSensorSnapshot(req.parcelId!),
+      getChatHistory(req.parcelId!, req.userId!),
+    ]);
+    const replyText = await askAssistant(text, parcel!, snapshot, history.map((m) => ({ role: m.role, text: m.text })));
+
+    const assistantMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      text: replyText,
+      timestamp: Date.now() / 1000,
+    };
+    await addChatMessage(req.parcelId!, req.userId!, assistantMsg);
+    res.status(201).json(assistantMsg);
+  } catch (err: any) {
+    console.error("[assistant]", err);
+    res.status(502).json({ error: err?.message ?? "Assistant IA indisponible pour le moment." });
+  }
+});
+
+parcelDataRouter.post("/assistant/photo", upload.single("photo"), async (req, res, next) => {
+  if (!req.file) return res.status(400).json({ error: "Champ 'photo' (multipart/form-data) manquant." });
+  const base64 = req.file.buffer.toString("base64");
+  const mimeType = req.file.mimetype || "image/jpeg";
+
+  try {
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      text: "Photo envoyée pour diagnostic",
+      imageUri: `data:${mimeType};base64,${base64}`,
+      timestamp: Date.now() / 1000,
+    };
+    await addChatMessage(req.parcelId!, req.userId!, userMsg);
+
+    const parcel = await getParcel(req.parcelId!);
+    const replyText = await diagnosePhoto(base64, mimeType, parcel!);
+    const assistantMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      text: replyText,
+      timestamp: Date.now() / 1000,
+    };
+    await addChatMessage(req.parcelId!, req.userId!, assistantMsg);
+    res.status(201).json(assistantMsg);
+  } catch (err: any) {
+    console.error("[assistant/photo]", err);
+    res.status(502).json({ error: err?.message ?? "Diagnostic photo indisponible pour le moment." });
+  }
+});

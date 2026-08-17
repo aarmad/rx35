@@ -7,6 +7,7 @@ import { WorkSans_400Regular, WorkSans_500Medium, WorkSans_600SemiBold } from "@
 
 import { ThemeProvider, useAppTheme } from "@/theme/ThemeContext";
 import { AuthProvider } from "@/auth/AuthContext";
+import { ParcelProvider } from "@/parcels/ParcelContext";
 import { RootNavigator } from "@/navigation/RootNavigator";
 
 function AppShell() {
@@ -40,7 +41,9 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <AppShell />
+          <ParcelProvider>
+            <AppShell />
+          </ParcelProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

@@ -22,6 +22,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // --- État simulé en mémoire (remplacera les appels réseau plus tard) ---
 let parcel: ParcelInfo = {
+  id: "demo",
   nom: "Parcelle 1 — Lomé Nord",
   culture: "tomate",
   datePlantation: "2026-07-20",

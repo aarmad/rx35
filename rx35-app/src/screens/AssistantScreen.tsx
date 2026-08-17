@@ -22,6 +22,7 @@ import {
 } from "@jamsch/expo-speech-recognition";
 import { TopBar } from "@/components/TopBar";
 import { useAppTheme } from "@/theme/ThemeContext";
+import { useParcel } from "@/parcels/ParcelContext";
 import { typography, spacing, radius } from "@/theme/tokens";
 import { getChatHistory, sendChatMessage, sendChatPhoto } from "@/services/api";
 import { ChatMessage } from "@/services/types";
@@ -36,6 +37,7 @@ function systemMessage(text: string): ChatMessage {
 
 export default function AssistantScreen() {
   const { colors } = useAppTheme();
+  const { current: parcel } = useParcel();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -111,7 +113,7 @@ export default function AssistantScreen() {
   };
 
   useEffect(() => {
-    getChatHistory()
+    getChatHistory(parcel!.id)
       .then(setMessages)
       .catch((err) => setMessages([systemMessage(err?.message ?? "Historique indisponible.")]));
   }, []);
@@ -127,8 +129,8 @@ export default function AssistantScreen() {
     setSending(true);
     setMessages((prev) => [...prev, { id: `tmp_${Date.now()}`, role: "user", text: t, timestamp: Date.now() / 1000 }]);
     try {
-      await sendChatMessage(t);
-      setMessages(await getChatHistory());
+      await sendChatMessage(parcel!.id, t);
+      setMessages(await getChatHistory(parcel!.id));
     } catch (err: any) {
       setMessages((prev) => [...prev, systemMessage(err?.message ?? "Assistant indisponible.")]);
     } finally {
@@ -143,8 +145,8 @@ export default function AssistantScreen() {
       { id: `tmp_${Date.now()}`, role: "user", text: "Photo envoyée pour diagnostic", imageUri: uri, timestamp: Date.now() / 1000 },
     ]);
     try {
-      await sendChatPhoto(uri);
-      setMessages(await getChatHistory());
+      await sendChatPhoto(parcel!.id, uri);
+      setMessages(await getChatHistory(parcel!.id));
     } catch (err: any) {
       setMessages((prev) => [...prev, systemMessage(err?.message ?? "Diagnostic photo indisponible.")]);
     } finally {

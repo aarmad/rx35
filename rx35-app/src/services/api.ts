@@ -1,10 +1,9 @@
 // ============================================================
-// Client API réel — remplace mockApi.ts.
+// Client API RX35.
 //
-// Mêmes signatures de fonctions que mockApi.ts (même forme de données),
-// donc aucun écran n'a eu à changer au-delà de l'import. mockApi.ts reste
-// dans le projet comme mode démo hors-ligne (voir README) mais n'est plus
-// utilisé par défaut.
+// Toutes les données appartiennent désormais à une PARCELLE : les routes
+// passent par /api/parcels/:id/... et l'identifiant courant vient du
+// ParcelContext (voir src/parcels/ParcelContext.tsx).
 // ============================================================
 import { API_BASE_URL } from "./config";
 import { getToken, setToken, notifyUnauthorized } from "./authStore";
@@ -12,10 +11,13 @@ import {
   AlertItem,
   ChatMessage,
   Culture,
+  DeviceInfo,
   NdviSnapshot,
   NpkSnapshot,
   ParcelInfo,
+  ParcelMember,
   PhotoItem,
+  Role,
   SensorSnapshot,
   WeatherDay,
 } from "./types";
@@ -34,28 +36,26 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
       },
     });
   } catch {
-    // fetch ne rejette que sur un échec réseau : backend éteint, mauvaise
-    // adresse dans .env, téléphone sur un autre réseau que l'ordinateur.
-    // Le message par défaut ("Network request failed") n'aide pas à
-    // diagnostiquer ça sur le terrain, donc on le remplace.
-    throw new Error(`Serveur RX35 injoignable (${API_BASE_URL}). Vérifiez que le backend tourne et que le téléphone est sur le même réseau Wi-Fi.`);
+    // fetch ne rejette que sur un échec réseau : serveur éteint, mauvaise
+    // adresse, téléphone hors ligne.
+    throw new Error(
+      `Serveur RX35 injoignable (${API_BASE_URL}). Vérifiez votre connexion internet.`
+    );
   }
 
   if (!res.ok) {
-    // Session expirée ou invalidée côté serveur : on nettoie le token et on
-    // prévient AuthContext, sinon l'utilisateur reste sur des écrans qui
-    // échoueront à chaque requête sans jamais lui proposer de se reconnecter.
+    // Session expirée ou invalidée : on nettoie et on prévient AuthContext,
+    // sinon l'utilisateur reste sur des écrans qui échouent en boucle.
     if (res.status === 401 && token) {
       await setToken(null);
       notifyUnauthorized();
     }
-
     let message = `Erreur ${res.status}`;
     try {
       const body = await res.json();
       if (body?.error) message = body.error;
     } catch {
-      // corps non-JSON, on garde le message générique
+      // corps non-JSON
     }
     throw new Error(message);
   }
@@ -64,12 +64,12 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   return (await res.json()) as T;
 }
 
-// Résout une URI d'image renvoyée par le backend (chemin relatif) en URL
-// absolue exploitable par <Image source={{uri}}>.
 function resolvePhotoUri(uri: string): string {
   if (uri.startsWith("http") || uri.startsWith("data:")) return uri;
   return `${API_BASE_URL}${uri}`;
 }
+
+// --- Compte ------------------------------------------------------------
 
 export interface AuthUser {
   id: string;
@@ -77,13 +77,18 @@ export interface AuthUser {
   telephone: string;
 }
 
-export async function apiRegister(nom: string, telephone: string, password: string): Promise<AuthUser> {
-  const r = await apiFetch<{ token: string; user: AuthUser }>("/api/auth/register", {
+export async function apiRegister(
+  nom: string,
+  telephone: string,
+  password: string,
+  nomParcelle?: string
+): Promise<{ user: AuthUser; parcel: ParcelInfo }> {
+  const r = await apiFetch<{ token: string; user: AuthUser; parcel: ParcelInfo }>("/api/auth/register", {
     method: "POST",
-    body: JSON.stringify({ nom, telephone, password }),
+    body: JSON.stringify({ nom, telephone, password, nomParcelle }),
   });
   await setToken(r.token);
-  return r.user;
+  return { user: r.user, parcel: r.parcel };
 }
 
 export async function apiLogin(telephone: string, password: string): Promise<AuthUser> {
@@ -107,123 +112,158 @@ export async function updateMe(update: Partial<Pick<AuthUser, "nom" | "telephone
   return apiFetch<AuthUser>("/api/auth/me", { method: "PUT", body: JSON.stringify(update) });
 }
 
-export async function getLatestSensorSnapshot(): Promise<SensorSnapshot> {
-  return apiFetch<SensorSnapshot>("/api/sensors/latest");
+// --- Parcelles ---------------------------------------------------------
+
+export async function listParcels(): Promise<(ParcelInfo & { role: Role })[]> {
+  return apiFetch("/api/parcels");
 }
 
-export async function getSensorHistory(periodDays: 1 | 7 | 30): Promise<SensorSnapshot[]> {
-  return apiFetch<SensorSnapshot[]>(`/api/sensors/history?period=${periodDays}`);
+export async function createParcel(data: {
+  nom: string;
+  culture?: Culture;
+  datePlantation?: string;
+  latitude?: number;
+  longitude?: number;
+}): Promise<ParcelInfo & { role: Role }> {
+  return apiFetch("/api/parcels", { method: "POST", body: JSON.stringify(data) });
 }
 
-export async function getNpkLatest(): Promise<NpkSnapshot> {
-  return apiFetch<NpkSnapshot>("/api/npk/latest");
+export async function getParcelInfo(parcelId: string): Promise<ParcelInfo & { role: Role }> {
+  return apiFetch(`/api/parcels/${parcelId}`);
 }
 
-export async function getParcelInfo(): Promise<ParcelInfo> {
-  return apiFetch<ParcelInfo>("/api/parcel");
+export async function saveParcelInfo(parcelId: string, update: Partial<ParcelInfo>): Promise<ParcelInfo> {
+  return apiFetch(`/api/parcels/${parcelId}`, { method: "PUT", body: JSON.stringify(update) });
 }
 
-export async function saveParcelInfo(update: Partial<ParcelInfo>): Promise<ParcelInfo> {
-  return apiFetch<ParcelInfo>("/api/parcel", { method: "PUT", body: JSON.stringify(update) });
+// --- Membres (coopérative) --------------------------------------------
+
+export async function listMembers(parcelId: string): Promise<ParcelMember[]> {
+  return apiFetch(`/api/parcels/${parcelId}/members`);
 }
 
-export async function getIrrigationMode(): Promise<"auto" | "manuel"> {
-  const r = await apiFetch<{ mode: "auto" | "manuel" }>("/api/irrigation/mode");
-  return r.mode;
+export async function addMember(parcelId: string, telephone: string, role: Role): Promise<ParcelMember[]> {
+  return apiFetch(`/api/parcels/${parcelId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ telephone, role }),
+  });
 }
 
-// Mode ET état de la pompe : relus ensemble à l'ouverture de l'accueil pour
-// que le bouton reflète ce que le boîtier va réellement faire.
-export async function getIrrigationState(): Promise<{ mode: "auto" | "manuel"; pumpManualOn: boolean }> {
-  return apiFetch<{ mode: "auto" | "manuel"; pumpManualOn: boolean }>("/api/irrigation/state");
+export async function removeMember(parcelId: string, userId: string): Promise<ParcelMember[]> {
+  return apiFetch(`/api/parcels/${parcelId}/members/${userId}`, { method: "DELETE" });
 }
 
-export async function setIrrigationMode(mode: "auto" | "manuel"): Promise<void> {
-  await apiFetch("/api/irrigation/mode", { method: "PUT", body: JSON.stringify({ mode }) });
+// --- Boîtiers ----------------------------------------------------------
+
+export async function listDevices(parcelId: string): Promise<DeviceInfo[]> {
+  return apiFetch(`/api/parcels/${parcelId}/devices`);
 }
 
-export async function setPumpManual(on: boolean): Promise<boolean> {
-  const r = await apiFetch<{ pumpManualOn: boolean }>("/api/irrigation/pump", {
+/** La clé complète n'est renvoyée qu'à la création : à recopier aussitôt. */
+export async function createDevice(parcelId: string, nom?: string): Promise<DeviceInfo & { key: string }> {
+  return apiFetch(`/api/parcels/${parcelId}/devices`, { method: "POST", body: JSON.stringify({ nom }) });
+}
+
+export async function deleteDevice(parcelId: string, deviceId: string): Promise<void> {
+  await apiFetch(`/api/parcels/${parcelId}/devices/${deviceId}`, { method: "DELETE" });
+}
+
+// --- Données de la parcelle -------------------------------------------
+
+export async function getLatestSensorSnapshot(parcelId: string): Promise<SensorSnapshot> {
+  return apiFetch(`/api/parcels/${parcelId}/sensors/latest`);
+}
+
+export async function getSensorHistory(parcelId: string, periodDays: 1 | 7 | 30): Promise<SensorSnapshot[]> {
+  return apiFetch(`/api/parcels/${parcelId}/sensors/history?period=${periodDays}`);
+}
+
+export async function getNpkLatest(parcelId: string): Promise<NpkSnapshot> {
+  return apiFetch(`/api/parcels/${parcelId}/npk/latest`);
+}
+
+export async function getIrrigationState(
+  parcelId: string
+): Promise<{ mode: "auto" | "manuel"; pumpManualOn: boolean }> {
+  return apiFetch(`/api/parcels/${parcelId}/irrigation/state`);
+}
+
+export async function setIrrigationMode(parcelId: string, mode: "auto" | "manuel"): Promise<void> {
+  await apiFetch(`/api/parcels/${parcelId}/irrigation/mode`, { method: "PUT", body: JSON.stringify({ mode }) });
+}
+
+export async function setPumpManual(parcelId: string, on: boolean): Promise<boolean> {
+  const r = await apiFetch<{ pumpManualOn: boolean }>(`/api/parcels/${parcelId}/irrigation/pump`, {
     method: "PUT",
     body: JSON.stringify({ on }),
   });
   return r.pumpManualOn;
 }
 
-export async function getWeather(): Promise<WeatherDay[]> {
-  return apiFetch<WeatherDay[]>("/api/weather");
+export async function getWeather(parcelId: string): Promise<WeatherDay[]> {
+  return apiFetch(`/api/parcels/${parcelId}/weather`);
 }
 
-export async function getAlerts(): Promise<AlertItem[]> {
-  return apiFetch<AlertItem[]>("/api/alerts");
+export async function getAlerts(parcelId: string): Promise<AlertItem[]> {
+  return apiFetch(`/api/parcels/${parcelId}/alerts`);
 }
 
-export async function markAlertRead(id: string): Promise<void> {
-  await apiFetch(`/api/alerts/${id}/read`, { method: "PUT" });
+export async function markAlertRead(parcelId: string, id: string): Promise<void> {
+  await apiFetch(`/api/parcels/${parcelId}/alerts/${id}/read`, { method: "PUT" });
 }
 
-export async function getUnreadAlertCount(): Promise<number> {
-  const r = await apiFetch<{ count: number }>("/api/alerts/unread-count");
+export async function getUnreadAlertCount(parcelId: string): Promise<number> {
+  const r = await apiFetch<{ count: number }>(`/api/parcels/${parcelId}/alerts/unread-count`);
   return r.count;
 }
 
-export async function getAvailableNdviDates(): Promise<string[]> {
-  return apiFetch<string[]>("/api/satellite/dates");
+export async function getAvailableNdviDates(parcelId: string): Promise<string[]> {
+  return apiFetch(`/api/parcels/${parcelId}/satellite/dates`);
 }
 
-export async function getNdviSnapshot(date: string): Promise<NdviSnapshot> {
-  // `source` indique si la grille vient réellement de Sentinel-2 ou du repli
-  // simulé du backend (identifiants Copernicus absents, scène trop nuageuse) —
-  // l'écran Carte l'affiche pour ne pas faire passer une simulation pour une
-  // mesure satellite.
-  return apiFetch<NdviSnapshot>(`/api/satellite/ndvi?date=${encodeURIComponent(date)}`);
+export async function getNdviSnapshot(parcelId: string, date: string): Promise<NdviSnapshot> {
+  return apiFetch(`/api/parcels/${parcelId}/satellite/ndvi?date=${encodeURIComponent(date)}`);
 }
 
-export async function getChatHistory(): Promise<ChatMessage[]> {
-  const history = await apiFetch<ChatMessage[]>("/api/assistant/history");
+export async function getChatHistory(parcelId: string): Promise<ChatMessage[]> {
+  const history = await apiFetch<ChatMessage[]>(`/api/parcels/${parcelId}/assistant/history`);
   return history.map((m) => (m.imageUri ? { ...m, imageUri: resolvePhotoUri(m.imageUri) } : m));
 }
 
-export async function sendChatMessage(text: string): Promise<ChatMessage> {
-  return apiFetch<ChatMessage>("/api/assistant/message", { method: "POST", body: JSON.stringify({ text }) });
+export async function sendChatMessage(parcelId: string, text: string): Promise<ChatMessage> {
+  return apiFetch(`/api/parcels/${parcelId}/assistant/message`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
 }
 
-export async function sendChatPhoto(imageUri: string): Promise<{ userMsg: ChatMessage; assistantMsg: ChatMessage }> {
+export async function sendChatPhoto(parcelId: string, imageUri: string): Promise<ChatMessage> {
   const form = new FormData();
   form.append("photo", { uri: imageUri, name: "photo.jpg", type: "image/jpeg" } as any);
-
-  const assistantMsg = await apiFetch<ChatMessage>("/api/assistant/photo", { method: "POST", body: form });
-  // Le backend enregistre aussi le message utilisateur ; on le relit pour
-  // rester cohérent avec l'historique côté serveur plutôt que d'en
-  // reconstruire un approximatif ici.
-  const history = await getChatHistory();
-  const userMsg = history[history.length - 2] ?? history[history.length - 1];
-  return { userMsg, assistantMsg };
+  return apiFetch(`/api/parcels/${parcelId}/assistant/photo`, { method: "POST", body: form });
 }
 
-export async function getPhotos(): Promise<PhotoItem[]> {
-  const photos = await apiFetch<PhotoItem[]>("/api/photos");
+export async function getPhotos(parcelId: string): Promise<PhotoItem[]> {
+  const photos = await apiFetch<PhotoItem[]>(`/api/parcels/${parcelId}/photos`);
   return photos.map((p) => ({ ...p, uri: resolvePhotoUri(p.uri) }));
 }
 
-export async function getPhotoNear(timestamp: number, toleranceSeconds = 1800): Promise<PhotoItem | null> {
+export async function getPhotoNear(
+  parcelId: string,
+  timestamp: number,
+  toleranceSeconds = 1800
+): Promise<PhotoItem | null> {
   try {
-    const p = await apiFetch<PhotoItem>(`/api/photos/near?timestamp=${Math.floor(timestamp)}&tolerance=${toleranceSeconds}`);
+    const p = await apiFetch<PhotoItem>(
+      `/api/parcels/${parcelId}/photos/near?timestamp=${Math.floor(timestamp)}&tolerance=${toleranceSeconds}`
+    );
     return { ...p, uri: resolvePhotoUri(p.uri) };
   } catch {
-    return null; // 404 attendu si aucune photo proche — pas une erreur à remonter
+    return null; // 404 attendu si aucune photo proche
   }
 }
 
-// Pas encore d'endpoint backend dédié à l'état de sécurité en temps réel
-// (le boîtier gère sa machine à états localement, voir access_control.cpp
-// côté firmware) — calcul purement indicatif en attendant la synchronisation.
-export async function getSecurityState(): Promise<"ARME" | "DESARME" | "ALARME"> {
-  return "ARME";
-}
-
-// Calcul purement local, ne dépend d'aucune donnée serveur — inchangé par
-// rapport à mockApi.ts.
+// Calcul purement local, indépendant du serveur.
 export async function getGrowthStage(culture: Culture, datePlantation: string): Promise<string> {
   const jours = Math.max(0, Math.floor((Date.now() - new Date(datePlantation).getTime()) / 86400000));
   const cycles: Record<Culture, { levee: number; croissance: number }> = {

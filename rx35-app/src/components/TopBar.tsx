@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAppTheme } from "@/theme/ThemeContext";
 import { spacing, radius } from "@/theme/tokens";
 import { getUnreadAlertCount } from "@/services/api";
+import { useParcel } from "@/parcels/ParcelContext";
 
 // Barre persistante en haut de chaque onglet principal : accès rapide aux
 // Alertes (avec badge) et à Réglages/Compte, pour ne pas les enterrer dans
@@ -13,12 +14,14 @@ import { getUnreadAlertCount } from "@/services/api";
 export function TopBar() {
   const { colors } = useAppTheme();
   const navigation = useNavigation<any>();
+  const { current: parcel } = useParcel();
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
+    if (!parcel) return;
     // Sondage discret : une panne réseau ne doit pas remonter d'erreur ici,
     // le badge garde simplement sa dernière valeur connue.
-    const load = () => getUnreadAlertCount().then(setUnread).catch(() => {});
+    const load = () => getUnreadAlertCount(parcel.id).then(setUnread).catch(() => {});
     load();
     const unsub = navigation.addListener?.("focus", load);
     const interval = setInterval(load, 15000);
@@ -26,7 +29,7 @@ export function TopBar() {
       clearInterval(interval);
       if (typeof unsub === "function") unsub();
     };
-  }, [navigation]);
+  }, [navigation, parcel]);
 
   return (
     <View style={styles.row}>

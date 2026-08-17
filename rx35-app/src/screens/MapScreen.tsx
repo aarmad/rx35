@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from
 import { Screen } from "@/components/Screen";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useAppTheme } from "@/theme/ThemeContext";
+import { useParcel } from "@/parcels/ParcelContext";
 import { typography, spacing, radius, palette } from "@/theme/tokens";
 import { getAvailableNdviDates, getNdviSnapshot } from "@/services/api";
 import { NdviSnapshot } from "@/services/types";
@@ -25,6 +26,7 @@ const ZONE_LABELS: Record<number, string> = {
 
 export default function MapScreen() {
   const { colors } = useAppTheme();
+  const { current: parcel } = useParcel();
   const [dates, setDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [snapshot, setSnapshot] = useState<NdviSnapshot | null>(null);
@@ -34,7 +36,7 @@ export default function MapScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const d = await getAvailableNdviDates();
+        const d = await getAvailableNdviDates(parcel!.id);
         setDates(d);
         setSelectedDate(d[0]);
       } catch (err: any) {
@@ -47,7 +49,7 @@ export default function MapScreen() {
   useEffect(() => {
     if (!selectedDate) return;
     setLoading(true);
-    getNdviSnapshot(selectedDate)
+    getNdviSnapshot(parcel!.id, selectedDate)
       .then((s) => {
         setSnapshot(s);
         setError(null);

@@ -32,12 +32,29 @@ export interface NpkSnapshot {
   conductivityUsCm: number;
 }
 
+export type Role = "proprietaire" | "membre" | "observateur";
+
 export interface ParcelInfo {
+  id: string;
   nom: string;
   culture: Culture;
   datePlantation: string; // ISO yyyy-mm-dd
   latitude: number;
   longitude: number;
+}
+
+export interface ParcelMember {
+  id: string;
+  nom: string;
+  telephone: string;
+  role: Role;
+}
+
+export interface DeviceInfo {
+  id: string;
+  parcelId: string;
+  nom: string;
+  lastSeenAt: number | null;
 }
 
 export interface AlertItem {

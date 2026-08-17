@@ -1,14 +1,24 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TextInput, Pressable } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { View, Text, StyleSheet, TextInput, Pressable, Alert, ActivityIndicator, Share } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "@/components/Screen";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useAppTheme, ThemePreference } from "@/theme/ThemeContext";
 import { useAuth } from "@/auth/AuthContext";
+import { useParcel } from "@/parcels/ParcelContext";
 import { typography, spacing, radius } from "@/theme/tokens";
-import { getParcelInfo, saveParcelInfo } from "@/services/api";
+import {
+  saveParcelInfo,
+  createParcel,
+  listMembers,
+  addMember,
+  removeMember,
+  listDevices,
+  createDevice,
+  deleteDevice,
+} from "@/services/api";
 import { API_BASE_URL } from "@/services/config";
-import { Culture, ParcelInfo } from "@/services/types";
+import { Culture, DeviceInfo, ParcelMember, Role } from "@/services/types";
 
 const CULTURES: Culture[] = ["tomate", "mais", "riz", "piment", "oignon"];
 const THEME_OPTIONS: { key: ThemePreference; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -16,55 +26,340 @@ const THEME_OPTIONS: { key: ThemePreference; label: string; icon: keyof typeof I
   { key: "dark", label: "Sombre", icon: "moon-outline" },
   { key: "auto", label: "Automatique", icon: "phone-portrait-outline" },
 ];
+const ROLE_LABEL: Record<Role, string> = {
+  proprietaire: "Propriétaire",
+  membre: "Membre",
+  observateur: "Observateur",
+};
 
 export default function SettingsScreen() {
   const { colors, preference, setPreference } = useAppTheme();
   const { user, updateProfile, logout } = useAuth();
-  const [parcel, setParcel] = useState<ParcelInfo | null>(null);
+  const { parcels, current, select, refresh } = useParcel();
+
   const [nom, setNom] = useState("");
   const [compteNom, setCompteNom] = useState(user?.nom ?? "");
   const [compteTelephone, setCompteTelephone] = useState(user?.telephone ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [members, setMembers] = useState<ParcelMember[]>([]);
+  const [devices, setDevices] = useState<DeviceInfo[]>([]);
+  const [invitePhone, setInvitePhone] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const estProprietaire = current?.role === "proprietaire";
+
+  useEffect(() => setNom(current?.nom ?? ""), [current?.id, current?.nom]);
+
+  const chargerDetails = useCallback(async () => {
+    if (!current) return;
+    try {
+      const [m, d] = await Promise.all([listMembers(current.id), listDevices(current.id)]);
+      setMembers(m);
+      setDevices(d);
+    } catch {
+      // Détails secondaires : leur absence ne doit pas bloquer l'écran.
+    }
+  }, [current?.id]);
 
   useEffect(() => {
-    getParcelInfo()
-      .then((p) => {
-        setParcel(p);
-        setNom(p.nom);
-        setError(null);
-      })
-      .catch((err) => setError(err?.message ?? "Configuration de la parcelle indisponible."));
-  }, []);
+    chargerDetails();
+  }, [chargerDetails]);
 
-  const updateCulture = async (culture: Culture) => {
-    if (!parcel) return;
-    const updated = await saveParcelInfo({ culture });
-    setParcel(updated);
+  const enregistrerNom = async () => {
+    if (!current || !nom.trim() || nom === current.nom) return;
+    try {
+      await saveParcelInfo(current.id, { nom: nom.trim() });
+      await refresh();
+    } catch (e: any) {
+      Alert.alert("Enregistrement impossible", e?.message ?? "");
+    }
   };
 
-  const saveNom = async () => {
-    if (!parcel) return;
-    setSaving(true);
-    const updated = await saveParcelInfo({ nom });
-    setParcel(updated);
-    setSaving(false);
+  const changerCulture = async (culture: Culture) => {
+    if (!current) return;
+    try {
+      await saveParcelInfo(current.id, { culture });
+      await refresh();
+    } catch (e: any) {
+      Alert.alert("Enregistrement impossible", e?.message ?? "");
+    }
+  };
+
+  const nouvelleParcelle = async () => {
+    setBusy(true);
+    try {
+      const p = await createParcel({ nom: `Parcelle ${parcels.length + 1}` });
+      await refresh();
+      select(p.id);
+    } catch (e: any) {
+      Alert.alert("Création impossible", e?.message ?? "");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inviter = async () => {
+    if (!current || !invitePhone.trim()) return;
+    setBusy(true);
+    try {
+      setMembers(await addMember(current.id, invitePhone.trim(), "membre"));
+      setInvitePhone("");
+    } catch (e: any) {
+      Alert.alert("Invitation impossible", e?.message ?? "");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const retirer = (m: ParcelMember) => {
+    if (!current) return;
+    Alert.alert("Retirer ce membre ?", `${m.nom} n'aura plus accès à cette parcelle.`, [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Retirer",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setMembers(await removeMember(current.id, m.id));
+          } catch (e: any) {
+            Alert.alert("Retrait impossible", e?.message ?? "");
+          }
+        },
+      },
+    ]);
+  };
+
+  // La clé n'est lisible qu'à la création : on la met immédiatement à
+  // disposition, sinon il faut supprimer le boîtier et en recréer un.
+  const ajouterBoitier = async () => {
+    if (!current) return;
+    setBusy(true);
+    try {
+      const d = await createDevice(current.id, `Boîtier ${devices.length + 1}`);
+      setDevices(await listDevices(current.id));
+      Alert.alert(
+        "Clé du boîtier",
+        `À recopier maintenant dans la configuration du firmware — elle ne sera plus affichée :\n\n${d.key}`,
+        [
+          { text: "Fermer", style: "cancel" },
+          { text: "Partager", onPress: () => Share.share({ message: d.key }) },
+        ]
+      );
+    } catch (e: any) {
+      Alert.alert("Création impossible", e?.message ?? "");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const supprimerBoitier = (d: DeviceInfo) => {
+    if (!current) return;
+    Alert.alert("Supprimer ce boîtier ?", `${d.nom} ne pourra plus envoyer de relevés.`, [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteDevice(current.id, d.id);
+            setDevices(await listDevices(current.id));
+          } catch (e: any) {
+            Alert.alert("Suppression impossible", e?.message ?? "");
+          }
+        },
+      },
+    ]);
   };
 
   const saveCompte = async () => {
     if (!compteNom.trim() || !compteTelephone.trim()) return;
-    await updateProfile({ nom: compteNom.trim(), telephone: compteTelephone.trim() });
+    try {
+      await updateProfile({ nom: compteNom.trim(), telephone: compteTelephone.trim() });
+    } catch (e: any) {
+      Alert.alert("Enregistrement impossible", e?.message ?? "");
+    }
   };
-
-  // Sans parcelle chargée, on garde tout de même l'écran accessible : c'est
-  // ici que l'utilisateur voit l'adresse du serveur et peut se déconnecter,
-  // les deux choses utiles justement quand la connexion ne marche pas.
-  if (!parcel && !error) return <Screen showTopBar={false}><></></Screen>;
 
   return (
     <Screen showTopBar={false}>
-      <ScreenHeader eyebrow="Configuration" title="Réglages" subtitle="Compte, parcelle et apparence de l'application" />
+      <ScreenHeader eyebrow="Configuration" title="Réglages" subtitle="Parcelles, boîtiers, équipe et apparence" />
 
+      {/* --- Parcelles --- */}
+      <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>
+        Mes parcelles
+      </Text>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {parcels.map((p) => (
+          <Pressable
+            key={p.id}
+            onPress={() => select(p.id)}
+            style={[
+              styles.parcelRow,
+              { borderColor: p.id === current?.id ? colors.primary : colors.border },
+              p.id === current?.id && { backgroundColor: colors.surfaceAlt },
+            ]}
+          >
+            <Ionicons
+              name={p.id === current?.id ? "radio-button-on" : "radio-button-off"}
+              size={18}
+              color={p.id === current?.id ? colors.primary : colors.textMuted}
+            />
+            <View style={{ flex: 1, marginLeft: spacing.sm }}>
+              <Text style={{ color: colors.text, fontFamily: typography.bodyMedium, fontSize: 14 }}>{p.nom}</Text>
+              <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 11 }}>
+                {p.culture} · {ROLE_LABEL[p.role]}
+              </Text>
+            </View>
+          </Pressable>
+        ))}
+        <Pressable onPress={nouvelleParcelle} disabled={busy} style={[styles.addRow, { borderColor: colors.border }]}>
+          <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+          <Text style={{ color: colors.primary, fontFamily: typography.bodyMedium, fontSize: 13, marginLeft: 6 }}>
+            Ajouter une parcelle
+          </Text>
+        </Pressable>
+      </View>
+
+      {current ? (
+        <>
+          {/* --- Parcelle courante --- */}
+          <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>
+            {current.nom}
+          </Text>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body }]}>Nom</Text>
+            <TextInput
+              value={nom}
+              onChangeText={setNom}
+              onBlur={enregistrerNom}
+              editable={current.role !== "observateur"}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body, marginTop: spacing.md }]}>
+              Culture
+            </Text>
+            <View style={styles.chipRow}>
+              {CULTURES.map((c) => (
+                <Pressable
+                  key={c}
+                  onPress={() => current.role !== "observateur" && changerCulture(c)}
+                  style={[
+                    styles.chip,
+                    { backgroundColor: current.culture === c ? colors.primary : colors.background, borderColor: colors.border },
+                  ]}
+                >
+                  <Text style={{ color: current.culture === c ? "#fff" : colors.text, fontFamily: typography.bodyMedium, fontSize: 12 }}>
+                    {c}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body, marginTop: spacing.md }]}>
+              Date de plantation
+            </Text>
+            <Text style={{ color: colors.text, fontFamily: typography.bodyMedium, fontSize: 14 }}>
+              {current.datePlantation}
+            </Text>
+
+            <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body, marginTop: spacing.md }]}>
+              Coordonnées GPS
+            </Text>
+            <Text style={{ color: colors.text, fontFamily: typography.bodyMedium, fontSize: 14 }}>
+              {current.latitude.toFixed(4)}, {current.longitude.toFixed(4)}
+            </Text>
+          </View>
+
+          {/* --- Boîtiers --- */}
+          <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>Boîtiers</Text>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {devices.length === 0 ? (
+              <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 13 }}>
+                Aucun boîtier. Ajoutez-en un pour obtenir la clé à recopier dans le firmware.
+              </Text>
+            ) : (
+              devices.map((d) => (
+                <View key={d.id} style={styles.memberRow}>
+                  <Ionicons name="hardware-chip-outline" size={18} color={colors.textMuted} />
+                  <View style={{ flex: 1, marginLeft: spacing.sm }}>
+                    <Text style={{ color: colors.text, fontFamily: typography.bodyMedium, fontSize: 14 }}>{d.nom}</Text>
+                    <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 11 }}>
+                      {d.lastSeenAt
+                        ? `Vu ${new Date(d.lastSeenAt * 1000).toLocaleString("fr-FR")}`
+                        : "Jamais connecté"}
+                    </Text>
+                  </View>
+                  {estProprietaire ? (
+                    <Pressable onPress={() => supprimerBoitier(d)} hitSlop={8}>
+                      <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))
+            )}
+            {estProprietaire ? (
+              <Pressable onPress={ajouterBoitier} disabled={busy} style={[styles.addRow, { borderColor: colors.border }]}>
+                {busy ? (
+                  <ActivityIndicator color={colors.primary} size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+                    <Text style={{ color: colors.primary, fontFamily: typography.bodyMedium, fontSize: 13, marginLeft: 6 }}>
+                      Ajouter un boîtier
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+
+          {/* --- Équipe --- */}
+          <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>
+            Personnes ayant accès
+          </Text>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {members.map((m) => (
+              <View key={m.id} style={styles.memberRow}>
+                <Ionicons name="person-circle-outline" size={20} color={colors.textMuted} />
+                <View style={{ flex: 1, marginLeft: spacing.sm }}>
+                  <Text style={{ color: colors.text, fontFamily: typography.bodyMedium, fontSize: 14 }}>{m.nom}</Text>
+                  <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 11 }}>
+                    {m.telephone} · {ROLE_LABEL[m.role]}
+                  </Text>
+                </View>
+                {estProprietaire && m.id !== user?.id ? (
+                  <Pressable onPress={() => retirer(m)} hitSlop={8}>
+                    <Ionicons name="close-circle-outline" size={20} color={colors.danger} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+            {estProprietaire ? (
+              <View style={{ marginTop: spacing.sm }}>
+                <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body }]}>
+                  Inviter par numéro (la personne doit déjà avoir un compte RX35)
+                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <TextInput
+                    value={invitePhone}
+                    onChangeText={setInvitePhone}
+                    placeholder="90 00 00 00"
+                    keyboardType="phone-pad"
+                    placeholderTextColor={colors.textMuted}
+                    style={[styles.input, { flex: 1, color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                  />
+                  <Pressable onPress={inviter} disabled={busy} style={[styles.inviteBtn, { backgroundColor: colors.primary }]}>
+                    <Ionicons name="person-add-outline" size={16} color="#fff" />
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+          </View>
+        </>
+      ) : null}
+
+      {/* --- Compte --- */}
       <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>Compte</Text>
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body }]}>Nom</Text>
@@ -92,59 +387,7 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
 
-      <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>Parcelle</Text>
-      {!parcel ? (
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.danger }]}>
-          <Text style={{ color: colors.danger, fontFamily: typography.body, fontSize: 13 }}>{error}</Text>
-        </View>
-      ) : (
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body }]}>Nom de la parcelle</Text>
-        <View style={styles.nomRow}>
-          <TextInput
-            value={nom}
-            onChangeText={setNom}
-            onBlur={saveNom}
-            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-            placeholder="Ex. Parcelle 1 — Lomé Nord"
-            placeholderTextColor={colors.textMuted}
-          />
-        </View>
-
-        <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body, marginTop: spacing.md }]}>
-          Culture
-        </Text>
-        <View style={styles.chipRow}>
-          {CULTURES.map((c) => (
-            <Pressable
-              key={c}
-              onPress={() => updateCulture(c)}
-              style={[
-                styles.chip,
-                { backgroundColor: parcel.culture === c ? colors.primary : colors.background, borderColor: colors.border },
-              ]}
-            >
-              <Text style={{ color: parcel.culture === c ? "#fff" : colors.text, fontFamily: typography.bodyMedium, fontSize: 12 }}>
-                {c}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body, marginTop: spacing.md }]}>
-          Date de plantation
-        </Text>
-        <Text style={{ color: colors.text, fontFamily: typography.bodyMedium, fontSize: 14 }}>{parcel.datePlantation}</Text>
-
-        <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body, marginTop: spacing.md }]}>
-          Coordonnées GPS du boîtier
-        </Text>
-        <Text style={{ color: colors.text, fontFamily: typography.bodyMedium, fontSize: 14 }}>
-          {parcel.latitude.toFixed(4)}, {parcel.longitude.toFixed(4)}
-        </Text>
-      </View>
-      )}
-
+      {/* --- Apparence --- */}
       <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>Apparence</Text>
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.chipRow}>
@@ -179,8 +422,6 @@ export default function SettingsScreen() {
         <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 12, marginTop: 2 }}>
           Application v0.1
         </Text>
-        {/* Adresse réellement utilisée par l'application : c'est la première
-            chose à vérifier quand rien ne se charge sur le téléphone. */}
         <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body, marginTop: spacing.md }]}>
           Serveur
         </Text>
@@ -194,10 +435,16 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 14, marginBottom: spacing.sm, marginTop: spacing.sm },
   card: { borderRadius: radius.md, borderWidth: 1, padding: spacing.md, marginBottom: spacing.lg },
   fieldLabel: { fontSize: 12, marginBottom: 6 },
-  nomRow: { flexDirection: "row" },
-  input: { flex: 1, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 8, fontSize: 14 },
+  input: { borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 8, fontSize: 14 },
   chipRow: { flexDirection: "row", flexWrap: "wrap" },
-  chip: { paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, marginRight: spacing.sm, marginBottom: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    marginRight: spacing.sm,
+    marginBottom: spacing.sm,
+  },
   themeChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -207,6 +454,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginRight: spacing.sm,
     marginBottom: spacing.sm,
+  },
+  parcelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  addRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderRadius: radius.sm,
+    paddingVertical: 10,
+    marginTop: spacing.xs,
+  },
+  memberRow: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.xs },
+  inviteBtn: {
+    width: 40,
+    height: 38,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: spacing.sm,
   },
   logoutButton: {
     flexDirection: "row",

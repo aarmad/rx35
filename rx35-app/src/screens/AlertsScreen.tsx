@@ -5,6 +5,7 @@ import { Screen } from "@/components/Screen";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { EmptyState } from "@/components/ScreenHeader";
 import { useAppTheme } from "@/theme/ThemeContext";
+import { useParcel } from "@/parcels/ParcelContext";
 import { typography, spacing, radius } from "@/theme/tokens";
 import { getAlerts, markAlertRead } from "@/services/api";
 import { AlertItem } from "@/services/types";
@@ -34,6 +35,7 @@ function timeAgo(ts: number) {
 
 export default function AlertsScreen() {
   const { colors } = useAppTheme();
+  const { current: parcel } = useParcel();
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [filter, setFilter] = useState<AlertItem["type"] | "tous">("tous");
 
@@ -41,7 +43,7 @@ export default function AlertsScreen() {
 
   const load = async () => {
     try {
-      setAlerts(await getAlerts());
+      setAlerts(await getAlerts(parcel!.id));
       setError(null);
     } catch (err: any) {
       setError(err?.message ?? "Alertes indisponibles.");
@@ -93,7 +95,7 @@ export default function AlertsScreen() {
             <Pressable
               onPress={async () => {
                 try {
-                  await markAlertRead(item.id);
+                  await markAlertRead(parcel!.id, item.id);
                 } catch {
                   // Marquage non enregistré côté serveur : le rechargement
                   // ci-dessous laissera l'alerte non lue, ce qui est l'état réel.

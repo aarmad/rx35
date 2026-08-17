@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "@/components/Screen";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useAppTheme } from "@/theme/ThemeContext";
+import { useParcel } from "@/parcels/ParcelContext";
 import { typography, spacing, radius } from "@/theme/tokens";
 import { getSensorHistory, getPhotos, getPhotoNear } from "@/services/api";
 import { getSensorHistory as getMockSensorHistory, getPhotos as getMockPhotos } from "@/services/mockApi";
@@ -29,6 +30,7 @@ function timeLabel(ts: number) {
 
 export default function HistoryScreen() {
   const { colors } = useAppTheme();
+  const { current: parcel } = useParcel();
   const [tab, setTab] = useState<Tab>("mesures");
   const [period, setPeriod] = useState<Period>(7);
   const [history, setHistory] = useState<SensorSnapshot[]>([]);
@@ -41,7 +43,7 @@ export default function HistoryScreen() {
 
   useEffect(() => {
     setLoading(true);
-    getSensorHistory(period).then((h) => {
+    getSensorHistory(parcel!.id, period).then((h) => {
       if (h.length === 0) {
         // Pas encore de relevés réels sur cette période — données de
         // démonstration pour pouvoir voir et ajuster le graphique en
@@ -69,7 +71,7 @@ export default function HistoryScreen() {
   }, [period]);
 
   useEffect(() => {
-    getPhotos()
+    getPhotos(parcel!.id)
       .then((ph) => {
         if (ph.length === 0) {
           getMockPhotos().then(setPhotos);
@@ -79,7 +81,7 @@ export default function HistoryScreen() {
       })
       .catch(() => getMockPhotos().then(setPhotos));
     // Photo associée à l'événement "mouvement détecté" affiché dans le journal
-    getPhotoNear(Date.now() / 1000 - 3600)
+    getPhotoNear(parcel!.id, Date.now() / 1000 - 3600)
       .then(setEventPhoto)
       .catch(() => setEventPhoto(null));
   }, []);

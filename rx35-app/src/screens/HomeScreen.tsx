@@ -12,12 +12,12 @@ import {
   getIrrigationState,
   setIrrigationMode,
   setPumpManual,
-  getParcelInfo,
   getGrowthStage,
   getWeather,
 } from "@/services/api";
 import { getLatestSensorSnapshot as getMockSensorSnapshot } from "@/services/mockApi";
-import { ParcelInfo, SensorSnapshot, WeatherDay } from "@/services/types";
+import { useParcel } from "@/parcels/ParcelContext";
+import { SensorSnapshot, WeatherDay } from "@/services/types";
 
 // Seuils indicatifs pour l'affichage (répliqués du firmware, à terme fournis
 // par le backend une fois la synchronisation en place — voir irrigation.cpp).
@@ -25,8 +25,8 @@ const SEUIL_HUMIDITE_PAR_DEFAUT = 55;
 
 export default function HomeScreen() {
   const { colors } = useAppTheme();
+  const { current: parcel, canControl } = useParcel();
   const [snapshot, setSnapshot] = useState<SensorSnapshot | null>(null);
-  const [parcel, setParcel] = useState<ParcelInfo | null>(null);
   const [stade, setStade] = useState<string>("");
   const [mode, setMode] = useState<"auto" | "manuel">("auto");
   const [pumpOn, setPumpOn] = useState(false);
@@ -36,19 +36,18 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!parcel) return;
     try {
       // La météo dépend d'un service externe (Open-Meteo) : son indisponibilité
       // ne doit pas empêcher l'affichage des données de la parcelle.
-      const [p, irrigation, w] = await Promise.all([
-        getParcelInfo(),
-        getIrrigationState(),
-        getWeather().catch(() => [] as WeatherDay[]),
+      const [irrigation, w] = await Promise.all([
+        getIrrigationState(parcel.id),
+        getWeather(parcel.id).catch(() => [] as WeatherDay[]),
       ]);
-      setParcel(p);
       setMode(irrigation.mode);
       setPumpOn(irrigation.pumpManualOn);
       setWeather(w);
-      const st = await getGrowthStage(p.culture, p.datePlantation);
+      const st = await getGrowthStage(parcel.culture, parcel.datePlantation);
       setStade(st);
 
       // Le boîtier n'a peut-être encore jamais envoyé de relevé (pas encore
@@ -56,7 +55,7 @@ export default function HomeScreen() {
       // bloqué en chargement, on bascule sur des valeurs de démonstration
       // pour pouvoir travailler l'interface en attendant.
       try {
-        const s = await getLatestSensorSnapshot();
+        const s = await getLatestSensorSnapshot(parcel.id);
         setSnapshot(s);
         setDemoSensors(false);
       } catch {
@@ -70,7 +69,7 @@ export default function HomeScreen() {
       // l'écran tourner indéfiniment sur son indicateur de chargement.
       setError(err?.message ?? "Chargement impossible.");
     }
-  }, []);
+  }, [parcel]);
 
   useEffect(() => {
     load();
@@ -90,7 +89,7 @@ export default function HomeScreen() {
     const next = mode === "auto" ? "manuel" : "auto";
     setMode(next);
     try {
-      await setIrrigationMode(next);
+      await setIrrigationMode(parcel!.id, next);
       setError(null);
     } catch (err: any) {
       setMode(previous);
@@ -103,7 +102,7 @@ export default function HomeScreen() {
     const next = !pumpOn;
     setPumpOn(next);
     try {
-      const confirmed = await setPumpManual(next);
+      const confirmed = await setPumpManual(parcel!.id, next);
       setPumpOn(confirmed);
       setError(null);
     } catch (err: any) {
@@ -183,7 +182,8 @@ export default function HomeScreen() {
           </Text>
         </View>
         <Pressable
-          onPress={toggleMode}
+          onPress={canControl ? toggleMode : undefined}
+          disabled={!canControl}
           style={[styles.pill, { backgroundColor: mode === "auto" ? colors.successSoft : colors.accentSoft }]}
         >
           <Text style={{ color: mode === "auto" ? colors.success : colors.accent, fontFamily: typography.bodySemiBold, fontSize: 12 }}>
@@ -192,7 +192,7 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {mode === "manuel" ? (
+      {mode === "manuel" && canControl ? (
         <Pressable
           onPress={togglePump}
           style={[
@@ -203,6 +203,12 @@ export default function HomeScreen() {
           <Ionicons name={pumpOn ? "stop-circle-outline" : "water-outline"} size={20} color="#fff" />
           <Text style={styles.pumpButtonText}>{pumpOn ? "Arrêter la pompe" : "Démarrer la pompe"}</Text>
         </Pressable>
+      ) : null}
+
+      {!canControl ? (
+        <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 12, marginBottom: spacing.sm }}>
+          Vous consultez cette parcelle en observateur : le pilotage de l'irrigation est réservé au propriétaire et aux membres.
+        </Text>
       ) : null}
 
       <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>Capteurs</Text>

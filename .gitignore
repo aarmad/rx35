@@ -32,3 +32,6 @@ Thumbs.db
 
 # APK generes (trop volumineux pour le depot)
 *.apk
+
+# Build compile du backend
+rx35-backend/dist/

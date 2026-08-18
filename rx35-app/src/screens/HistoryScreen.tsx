@@ -8,7 +8,7 @@ import { useAppTheme } from "@/theme/ThemeContext";
 import { useParcel } from "@/parcels/ParcelContext";
 import { typography, spacing, radius } from "@/theme/tokens";
 import { getSensorHistory, getPhotos, getPhotoNear } from "@/services/api";
-import { getSensorHistory as getMockSensorHistory, getPhotos as getMockPhotos } from "@/services/mockApi";
+import { avecCache } from "@/services/cache";
 import { PhotoItem, SensorSnapshot } from "@/services/types";
 
 type Period = 1 | 7 | 30;
@@ -39,47 +39,29 @@ export default function HistoryScreen() {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [eventPhoto, setEventPhoto] = useState<PhotoItem | null>(null);
   const [viewerPhoto, setViewerPhoto] = useState<PhotoItem | null>(null);
-  const [demoData, setDemoData] = useState(false);
+  const [horsConnexion, setHorsConnexion] = useState<number | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    getSensorHistory(parcel!.id, period).then((h) => {
-      if (h.length === 0) {
-        // Pas encore de relevés réels sur cette période — données de
-        // démonstration pour pouvoir voir et ajuster le graphique en
-        // attendant que le boîtier envoie de vraies mesures.
-        getMockSensorHistory(period).then((mh) => {
-          setHistory(mh);
-          setDemoData(true);
-          setLoading(false);
-        });
-      } else {
-        setHistory(h);
-        setDemoData(false);
-        setLoading(false);
-      }
-    }).catch(() => {
-      // Backend injoignable : on montre la série de démonstration plutôt
-      // qu'un écran vide bloqué en chargement (l'accueil, lui, affiche
-      // explicitement l'erreur de connexion).
-      getMockSensorHistory(period).then((mh) => {
-        setHistory(mh);
-        setDemoData(true);
-        setLoading(false);
-      });
-    });
-  }, [period]);
+    // Hors connexion, on ressort l'historique réellement téléchargé la
+    // dernière fois — pas une série inventée : un graphique de
+    // démonstration pourrait être pris pour l'état du sol.
+    avecCache(`${parcel!.id}:historique:${period}`, () => getSensorHistory(parcel!.id, period))
+      .then((r) => {
+        setHistory(r.data);
+        setHorsConnexion(r.horsConnexion ? r.savedAt ?? null : null);
+      })
+      .catch(() => {
+        setHistory([]);
+        setHorsConnexion(null);
+      })
+      .finally(() => setLoading(false));
+  }, [period, parcel?.id]);
 
   useEffect(() => {
-    getPhotos(parcel!.id)
-      .then((ph) => {
-        if (ph.length === 0) {
-          getMockPhotos().then(setPhotos);
-        } else {
-          setPhotos(ph);
-        }
-      })
-      .catch(() => getMockPhotos().then(setPhotos));
+    avecCache(`${parcel!.id}:photos`, () => getPhotos(parcel!.id))
+      .then((r) => setPhotos(r.data))
+      .catch(() => setPhotos([]));
     // Photo associée à l'événement "mouvement détecté" affiché dans le journal
     getPhotoNear(parcel!.id, Date.now() / 1000 - 3600)
       .then(setEventPhoto)
@@ -98,10 +80,19 @@ export default function HistoryScreen() {
     <Screen>
       <ScreenHeader eyebrow="Journal des mesures" title="Historique" subtitle="Évolution des capteurs, événements et photos capturées" />
 
-      {demoData ? (
+      {horsConnexion ? (
         <View style={[styles.demoBanner, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
           <Text style={{ color: colors.accent, fontFamily: typography.bodyMedium, fontSize: 12 }}>
-            Données de démonstration — le boîtier n'a pas encore envoyé de relevé réel.
+            Hors connexion — historique téléchargé le{" "}
+            {new Date(horsConnexion * 1000).toLocaleDateString("fr-FR")}.
+          </Text>
+        </View>
+      ) : null}
+
+      {!loading && history.length === 0 ? (
+        <View style={[styles.demoBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={{ color: colors.textMuted, fontFamily: typography.bodyMedium, fontSize: 12 }}>
+            Aucune mesure sur cette période.
           </Text>
         </View>
       ) : null}

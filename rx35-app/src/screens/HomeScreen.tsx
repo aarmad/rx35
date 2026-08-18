@@ -15,13 +15,18 @@ import {
   getGrowthStage,
   getWeather,
 } from "@/services/api";
-import { getLatestSensorSnapshot as getMockSensorSnapshot } from "@/services/mockApi";
+import { avecCache } from "@/services/cache";
 import { useParcel } from "@/parcels/ParcelContext";
 import { SensorSnapshot, WeatherDay } from "@/services/types";
 
 // Seuils indicatifs pour l'affichage (répliqués du firmware, à terme fournis
 // par le backend une fois la synchronisation en place — voir irrigation.cpp).
 const SEUIL_HUMIDITE_PAR_DEFAUT = 55;
+
+function formatDate(epoch: number): string {
+  const d = new Date(epoch * 1000);
+  return `${d.toLocaleDateString("fr-FR")} à ${d.getHours()}h${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 export default function HomeScreen() {
   const { colors } = useAppTheme();
@@ -32,7 +37,8 @@ export default function HomeScreen() {
   const [pumpOn, setPumpOn] = useState(false);
   const [weather, setWeather] = useState<WeatherDay[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [demoSensors, setDemoSensors] = useState(false);
+  const [horsConnexion, setHorsConnexion] = useState<number | null>(null);
+  const [sansReleve, setSansReleve] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -41,27 +47,30 @@ export default function HomeScreen() {
       // La météo dépend d'un service externe (Open-Meteo) : son indisponibilité
       // ne doit pas empêcher l'affichage des données de la parcelle.
       const [irrigation, w] = await Promise.all([
-        getIrrigationState(parcel.id),
-        getWeather(parcel.id).catch(() => [] as WeatherDay[]),
+        avecCache(`${parcel.id}:irrigation`, () => getIrrigationState(parcel.id)),
+        avecCache(`${parcel.id}:meteo`, () => getWeather(parcel.id)).catch(
+          () => ({ data: [] as WeatherDay[], horsConnexion: false, savedAt: undefined })
+        ),
       ]);
-      setMode(irrigation.mode);
-      setPumpOn(irrigation.pumpManualOn);
-      setWeather(w);
+      setMode(irrigation.data.mode);
+      setPumpOn(irrigation.data.pumpManualOn);
+      setWeather(w.data);
       const st = await getGrowthStage(parcel.culture, parcel.datePlantation);
       setStade(st);
 
-      // Le boîtier n'a peut-être encore jamais envoyé de relevé (pas encore
-      // acheté/câblé, ou pas encore connecté au Wi-Fi) : plutôt que de rester
-      // bloqué en chargement, on bascule sur des valeurs de démonstration
-      // pour pouvoir travailler l'interface en attendant.
+      // Deux situations distinctes, à ne pas confondre pour l'agriculteur :
+      //  - le boîtier n'a jamais envoyé de relevé (404) : il n'y a rien à
+      //    montrer, on le dit ;
+      //  - le réseau manque : on ressort le dernier relevé connu, daté.
       try {
-        const s = await getLatestSensorSnapshot(parcel.id);
-        setSnapshot(s);
-        setDemoSensors(false);
+        const r = await avecCache(`${parcel.id}:releve`, () => getLatestSensorSnapshot(parcel.id));
+        setSnapshot(r.data);
+        setSansReleve(false);
+        setHorsConnexion(r.horsConnexion ? r.savedAt ?? null : null);
       } catch {
-        const s = await getMockSensorSnapshot();
-        setSnapshot(s);
-        setDemoSensors(true);
+        setSnapshot(null);
+        setSansReleve(true);
+        setHorsConnexion(irrigation.horsConnexion ? irrigation.savedAt ?? null : null);
       }
       setError(null);
     } catch (err: any) {
@@ -133,7 +142,7 @@ export default function HomeScreen() {
     );
   }
 
-  if (!snapshot || !parcel) {
+  if (!parcel || (!snapshot && !sansReleve)) {
     return (
       <Screen>
         <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxl }} />
@@ -153,14 +162,23 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      {demoSensors ? (
+      {horsConnexion ? (
         <View style={[styles.demoBanner, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
           <Text style={{ color: colors.accent, fontFamily: typography.bodyMedium, fontSize: 12 }}>
-            Données de démonstration — le boîtier n'a pas encore envoyé de relevé réel.
+            Hors connexion — dernières données reçues le {formatDate(horsConnexion)}.
           </Text>
         </View>
       ) : null}
 
+      {sansReleve ? (
+        <View style={[styles.demoBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={{ color: colors.textMuted, fontFamily: typography.bodyMedium, fontSize: 12 }}>
+            Aucun relevé pour l'instant. Ajoutez un boîtier dans Réglages, puis recopiez sa clé dans le firmware.
+          </Text>
+        </View>
+      ) : null}
+
+      {snapshot ? (
       <View style={[styles.gaugeCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <RadialGauge
           value={snapshot.soilMoisturePct}
@@ -173,6 +191,8 @@ export default function HomeScreen() {
           <LegendDot color={colors.success} label="Au-dessus du seuil — sol suffisamment humide" />
         </View>
       </View>
+
+      ) : null}
 
       <View style={[styles.modeCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={{ flex: 1 }}>
@@ -211,6 +231,8 @@ export default function HomeScreen() {
         </Text>
       ) : null}
 
+      {snapshot ? (
+      <>
       <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>Capteurs</Text>
       <View style={styles.grid}>
         <SensorCard icon="thermometer-outline" label="Température" value={`${snapshot.temperatureC.toFixed(1)}°C`} />
@@ -232,6 +254,8 @@ export default function HomeScreen() {
         <SensorCard icon="battery-half-outline" label="Batterie" value={`${snapshot.batteryPct.toFixed(0)}%`} />
         <SensorCard icon="speedometer-outline" label="Débit cumulé" value={`${snapshot.flowTotalL.toFixed(0)} L`} />
       </View>
+      </>
+      ) : null}
 
       <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>Météo (5 jours)</Text>
       <View style={[styles.weatherCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>

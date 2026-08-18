@@ -40,6 +40,7 @@ export default function SettingsScreen() {
   const [nom, setNom] = useState("");
   const [compteNom, setCompteNom] = useState(user?.nom ?? "");
   const [compteTelephone, setCompteTelephone] = useState(user?.telephone ?? "");
+  const [compteEmail, setCompteEmail] = useState(user?.email ?? "");
   const [members, setMembers] = useState<ParcelMember[]>([]);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [invitePhone, setInvitePhone] = useState("");
@@ -173,7 +174,13 @@ export default function SettingsScreen() {
   const saveCompte = async () => {
     if (!compteNom.trim() || !compteTelephone.trim()) return;
     try {
-      await updateProfile({ nom: compteNom.trim(), telephone: compteTelephone.trim() });
+      await updateProfile({
+        nom: compteNom.trim(),
+        telephone: compteTelephone.trim(),
+        // Envoyé seulement s'il est renseigné : le serveur conserve la
+        // valeur existante quand le champ est absent.
+        email: compteEmail.trim() || undefined,
+      });
     } catch (e: any) {
       Alert.alert("Enregistrement impossible", e?.message ?? "");
     }
@@ -379,6 +386,25 @@ export default function SettingsScreen() {
           style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
           placeholderTextColor={colors.textMuted}
         />
+        <Text style={[styles.fieldLabel, { color: colors.textMuted, fontFamily: typography.body, marginTop: spacing.sm }]}>
+          Adresse e-mail (facultative)
+        </Text>
+        <TextInput
+          value={compteEmail}
+          onChangeText={setCompteEmail}
+          onBlur={saveCompte}
+          placeholder="pour recuperer un mot de passe oublie"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+          placeholderTextColor={colors.textMuted}
+        />
+        <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 11, marginTop: 6, lineHeight: 15 }}>
+          {compteEmail.trim()
+            ? "En cas d'oubli, un code de reinitialisation sera envoye a cette adresse."
+            : "Sans adresse e-mail, un mot de passe perdu ne peut pas etre recupere."}
+        </Text>
+
         <Pressable onPress={logout} style={[styles.logoutButton, { borderColor: colors.danger }]}>
           <Ionicons name="log-out-outline" size={16} color={colors.danger} />
           <Text style={{ color: colors.danger, fontFamily: typography.bodyMedium, fontSize: 13, marginLeft: 6 }}>

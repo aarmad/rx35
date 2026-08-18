@@ -21,6 +21,8 @@ export interface UserAccount {
   id: string;
   nom: string;
   telephone: string;
+  /** Optionnel : sert uniquement à récupérer un accès perdu. */
+  email?: string | null;
   passwordHash: string;
   createdAt: number;
 }
@@ -135,6 +137,7 @@ function rowToUser(r: any): UserAccount {
     id: r.id,
     nom: r.nom,
     telephone: r.telephone,
+    email: r.email ?? null,
     passwordHash: r.password_hash,
     createdAt: toEpoch(r.created_at),
   };
@@ -152,14 +155,70 @@ export async function findUserById(id: string): Promise<UserAccount | null> {
 
 export async function updateUser(
   id: string,
-  update: Partial<Pick<UserAccount, "nom" | "telephone">>
+  update: Partial<Pick<UserAccount, "nom" | "telephone" | "email">>
 ): Promise<UserAccount | null> {
   const { rows } = await pool.query(
-    `UPDATE users SET nom = COALESCE($2, nom), telephone = COALESCE($3, telephone)
+    `UPDATE users SET
+       nom = COALESCE($2, nom),
+       telephone = COALESCE($3, telephone),
+       email = COALESCE($4, email)
      WHERE id = $1 RETURNING *`,
-    [id, update.nom ?? null, update.telephone ?? null]
+    [id, update.nom ?? null, update.telephone ?? null, update.email ?? null]
   );
   return rows[0] ? rowToUser(rows[0]) : null;
+}
+
+export async function findUserByEmail(email: string): Promise<UserAccount | null> {
+  const { rows } = await pool.query(`SELECT * FROM users WHERE lower(email) = lower($1)`, [email]);
+  return rows[0] ? rowToUser(rows[0]) : null;
+}
+
+export async function setPassword(userId: string, passwordHash: string): Promise<void> {
+  await pool.query(`UPDATE users SET password_hash = $2 WHERE id = $1`, [userId, passwordHash]);
+}
+
+// --- Réinitialisation de mot de passe ----------------------------------
+
+const MAX_TENTATIVES_CODE = 5;
+
+/** Crée un code à 6 chiffres, valable 15 minutes. Renvoie le code en clair. */
+export async function creerCodeReinitialisation(userId: string): Promise<string> {
+  // Les demandes précédentes sont invalidées : un seul code actif à la fois.
+  await pool.query(`UPDATE password_resets SET used_at = now() WHERE user_id = $1 AND used_at IS NULL`, [userId]);
+  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+  await pool.query(
+    `INSERT INTO password_resets (id, user_id, code_hash, expires_at)
+     VALUES ($1, $2, $3, now() + interval '15 minutes')`,
+    [crypto.randomUUID(), userId, hashKey(code)]
+  );
+  return code;
+}
+
+/**
+ * Vérifie un code et, s'il est valide, le consomme. Le compteur de
+ * tentatives évite qu'un million d'essais ne vienne à bout de 6 chiffres.
+ */
+export async function consommerCodeReinitialisation(userId: string, code: string): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT * FROM password_resets
+     WHERE user_id = $1 AND used_at IS NULL AND expires_at > now()
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId]
+  );
+  const demande = rows[0];
+  if (!demande) return false;
+  if (demande.attempts >= MAX_TENTATIVES_CODE) return false;
+
+  const attendu = Buffer.from(demande.code_hash, "utf8");
+  const fourni = Buffer.from(hashKey(code), "utf8");
+  const ok = attendu.length === fourni.length && crypto.timingSafeEqual(attendu, fourni);
+
+  if (!ok) {
+    await pool.query(`UPDATE password_resets SET attempts = attempts + 1 WHERE id = $1`, [demande.id]);
+    return false;
+  }
+  await pool.query(`UPDATE password_resets SET used_at = now() WHERE id = $1`, [demande.id]);
+  return true;
 }
 
 // --- Parcelles et adhésions -------------------------------------------

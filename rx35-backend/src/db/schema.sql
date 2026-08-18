@@ -148,3 +148,26 @@ CREATE TABLE IF NOT EXISTS photos (
 );
 CREATE INDEX IF NOT EXISTS idx_photos_parcel_time
   ON photos(parcel_id, captured_at DESC);
+
+-- ============================================================
+-- Réinitialisation de mot de passe (ajout ultérieur).
+--
+-- L'e-mail est OPTIONNEL : beaucoup d'agriculteurs n'en ont pas, le
+-- compte reste identifié par le numéro de téléphone. Il ne sert qu'à
+-- récupérer un accès perdu.
+-- ============================================================
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(lower(email)) WHERE email IS NOT NULL;
+
+-- Le code est stocké hashé : une fuite de la base ne permet pas de
+-- prendre la main sur les comptes en attente de réinitialisation.
+CREATE TABLE IF NOT EXISTS password_resets (
+  id         UUID PRIMARY KEY,
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash  TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_resets_user ON password_resets(user_id, expires_at DESC);

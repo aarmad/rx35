@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { loadStoredToken, setToken, onUnauthorized } from "@/services/authStore";
-import { apiLogin, apiLogout, apiRegister, getMe, updateMe, AuthUser } from "@/services/api";
+import { apiLogin, apiLogout, apiRegister, getMe, updateMe, reinitialiserMotDePasse, AuthUser } from "@/services/api";
+import { clearCache } from "@/services/cache";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -9,7 +10,8 @@ interface AuthContextValue {
   login: (telephone: string, password: string) => Promise<void>;
   register: (nom: string, telephone: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateProfile: (update: Partial<Pick<AuthUser, "nom" | "telephone">>) => Promise<void>;
+  resetPassword: (telephone: string, code: string, password: string) => Promise<void>;
+  updateProfile: (update: Partial<Pick<AuthUser, "nom" | "telephone" | "email">>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -55,17 +57,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await apiLogout();
+    // Les données en cache appartiennent au compte qui vient de partir :
+    // les laisser exposerait la parcelle au compte suivant sur ce téléphone.
+    await clearCache();
     setUser(null);
   }, []);
 
-  const updateProfile = useCallback(async (update: Partial<Pick<AuthUser, "nom" | "telephone">>) => {
+  const resetPassword = useCallback(async (telephone: string, code: string, password: string) => {
+    setUser(await reinitialiserMotDePasse(telephone, code, password));
+  }, []);
+
+  const updateProfile = useCallback(async (update: Partial<Pick<AuthUser, "nom" | "telephone" | "email">>) => {
     const me = await updateMe(update);
     setUser(me);
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, isAuthenticated: !!user, login, register, logout, updateProfile }}
+      value={{ user, isLoading, isAuthenticated: !!user, login, register, logout, resetPassword, updateProfile }}
     >
       {children}
     </AuthContext.Provider>

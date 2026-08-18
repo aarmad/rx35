@@ -9,9 +9,15 @@ import { ThemeProvider, useAppTheme } from "@/theme/ThemeContext";
 import { AuthProvider } from "@/auth/AuthContext";
 import { ParcelProvider } from "@/parcels/ParcelContext";
 import { RootNavigator } from "@/navigation/RootNavigator";
+import { useParcel } from "@/parcels/ParcelContext";
+import { useAlertNotifications } from "@/alerts/useAlertNotifications";
 
 function AppShell() {
   const { colors, isDark } = useAppTheme();
+  const { current } = useParcel();
+  // Surveille les alertes de la parcelle courante et notifie l'agriculteur
+  // sans qu'il ait à ouvrir l'écran Alertes.
+  useAlertNotifications(current?.id ?? null, current?.nom);
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style={isDark ? "light" : "dark"} />

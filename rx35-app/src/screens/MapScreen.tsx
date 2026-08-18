@@ -6,6 +6,7 @@ import { useAppTheme } from "@/theme/ThemeContext";
 import { useParcel } from "@/parcels/ParcelContext";
 import { typography, spacing, radius, palette } from "@/theme/tokens";
 import { getAvailableNdviDates, getNdviSnapshot } from "@/services/api";
+import { avecCache } from "@/services/cache";
 import { NdviSnapshot } from "@/services/types";
 
 const ZONE_COLORS: Record<number, string> = {
@@ -32,11 +33,12 @@ export default function MapScreen() {
   const [snapshot, setSnapshot] = useState<NdviSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [horsConnexion, setHorsConnexion] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const d = await getAvailableNdviDates(parcel!.id);
+        const d = (await avecCache(`${parcel!.id}:ndvi-dates`, () => getAvailableNdviDates(parcel!.id))).data;
         setDates(d);
         setSelectedDate(d[0]);
       } catch (err: any) {
@@ -49,9 +51,10 @@ export default function MapScreen() {
   useEffect(() => {
     if (!selectedDate) return;
     setLoading(true);
-    getNdviSnapshot(parcel!.id, selectedDate)
-      .then((s) => {
-        setSnapshot(s);
+    avecCache(`${parcel!.id}:ndvi:${selectedDate}`, () => getNdviSnapshot(parcel!.id, selectedDate))
+      .then((r) => {
+        setSnapshot(r.data);
+        setHorsConnexion(r.horsConnexion);
         setError(null);
       })
       .catch((err) => setError(err?.message ?? "Carte satellite indisponible."))
@@ -120,7 +123,9 @@ export default function MapScreen() {
       </View>
 
       <Text style={[styles.noteText, { color: colors.textMuted, fontFamily: typography.body }]}>
-        {!snapshot || error
+        {horsConnexion
+          ? "Hors connexion : dernière carte satellite téléchargée pour cette date."
+          : !snapshot || error
           ? "La grille NDVI est calculée par le backend à partir des images Sentinel-2 (Copernicus) sur les coordonnées GPS du boîtier."
           : snapshot.source === "sentinel-hub"
           ? "Grille NDVI calculée à partir d'une image Sentinel-2 (Copernicus) sur les coordonnées GPS du boîtier."

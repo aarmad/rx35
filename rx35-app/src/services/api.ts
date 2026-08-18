@@ -75,6 +75,8 @@ export interface AuthUser {
   id: string;
   nom: string;
   telephone: string;
+  /** Optionnel : sert uniquement à récupérer un accès perdu. */
+  email?: string | null;
 }
 
 export async function apiRegister(
@@ -108,8 +110,35 @@ export async function getMe(): Promise<AuthUser> {
   return apiFetch<AuthUser>("/api/auth/me");
 }
 
-export async function updateMe(update: Partial<Pick<AuthUser, "nom" | "telephone">>): Promise<AuthUser> {
+export async function updateMe(
+  update: Partial<Pick<AuthUser, "nom" | "telephone" | "email">>
+): Promise<AuthUser> {
   return apiFetch<AuthUser>("/api/auth/me", { method: "PUT", body: JSON.stringify(update) });
+}
+
+// --- Mot de passe oublié ----------------------------------------------
+
+/** Le serveur répond toujours pareil : impossible de savoir si le numéro existe. */
+export async function demanderCodeReinitialisation(telephone: string): Promise<string> {
+  const r = await apiFetch<{ message: string }>("/api/auth/forgot", {
+    method: "POST",
+    body: JSON.stringify({ telephone }),
+  });
+  return r.message;
+}
+
+/** Réinitialise et connecte directement : l'agriculteur ne ressaisit rien. */
+export async function reinitialiserMotDePasse(
+  telephone: string,
+  code: string,
+  password: string
+): Promise<AuthUser> {
+  const r = await apiFetch<{ token: string; user: AuthUser }>("/api/auth/reset", {
+    method: "POST",
+    body: JSON.stringify({ telephone, code, password }),
+  });
+  await setToken(r.token);
+  return r.user;
 }
 
 // --- Parcelles ---------------------------------------------------------

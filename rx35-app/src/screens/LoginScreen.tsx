@@ -68,7 +68,11 @@ export default function LoginScreen() {
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Se connecter</Text>}
           </Pressable>
 
-          <Pressable onPress={() => navigation.navigate("Register")} style={{ marginTop: spacing.lg, alignItems: "center" }}>
+          <Pressable onPress={() => navigation.navigate("MotDePasseOublie")} style={{ marginTop: spacing.md, alignItems: "center" }}>
+            <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 13 }}>Mot de passe oublié ?</Text>
+          </Pressable>
+
+          <Pressable onPress={() => navigation.navigate("Register")} style={{ marginTop: spacing.md, alignItems: "center" }}>
             <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 13 }}>
               Pas encore de compte ? <Text style={{ color: colors.accent, fontFamily: typography.bodySemiBold }}>Créer un compte</Text>
             </Text>

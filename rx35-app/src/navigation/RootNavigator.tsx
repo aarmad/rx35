@@ -16,6 +16,7 @@ import AssistantScreen from "@/screens/AssistantScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import LoginScreen from "@/screens/LoginScreen";
 import RegisterScreen from "@/screens/RegisterScreen";
+import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen";
 
 // Barre du bas volontairement réduite à 4 onglets (retour utilisateur) :
 // Alertes et Réglages/Compte restent accessibles partout via la TopBar,
@@ -33,6 +34,7 @@ export type RootStackParamList = {
   Reglages: undefined;
   Login: undefined;
   Register: undefined;
+  MotDePasseOublie: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -125,6 +127,7 @@ export function RootNavigator() {
           <>
             <Stack.Screen name="Login" component={LoginScreen} options={{ presentation: "card" }} />
             <Stack.Screen name="Register" component={RegisterScreen} options={{ presentation: "card" }} />
+            <Stack.Screen name="MotDePasseOublie" component={ForgotPasswordScreen} options={{ presentation: "card" }} />
           </>
         )}
       </Stack.Navigator>

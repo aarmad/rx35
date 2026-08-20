@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>RX35 — Guide de test sur téléphone</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm 14mm 14mm; }
+
+  :root {
+    --vert: #1F3B2C;
+    --ocre: #C97A2E;
+    --rouge: #A93226;
+    --texte: #23231F;
+    --gris: #6B6B63;
+    --trait: #DAD5C7;
+    --fond-doux: #F6F1E4;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: var(--texte);
+    font-size: 10.2pt;
+    line-height: 1.45;
+    margin: 0;
+  }
+
+  h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 25pt;
+    color: var(--vert);
+    margin: 0 0 2mm;
+    letter-spacing: -0.4pt;
+  }
+  .eyebrow {
+    color: var(--ocre);
+    font-size: 8.5pt;
+    font-weight: 700;
+    letter-spacing: 1.4pt;
+    text-transform: uppercase;
+    margin-bottom: 1mm;
+  }
+  .sous-titre { color: var(--gris); font-size: 10pt; margin: 0 0 3mm; }
+
+  .meta {
+    border-top: 1px solid var(--trait);
+    border-bottom: 1px solid var(--trait);
+    padding: 2.5mm 0;
+    margin-bottom: 6mm;
+    font-size: 9pt;
+    color: var(--gris);
+    display: flex;
+    gap: 8mm;
+    flex-wrap: wrap;
+  }
+  .meta b { color: var(--texte); font-weight: 600; }
+
+  h2 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 14pt;
+    color: var(--vert);
+    margin: 7mm 0 2.5mm;
+    padding-bottom: 1.2mm;
+    border-bottom: 2px solid var(--vert);
+    break-after: avoid;
+  }
+  h3 {
+    font-size: 10.5pt;
+    color: var(--vert);
+    margin: 4mm 0 1.5mm;
+    break-after: avoid;
+  }
+  p { margin: 0 0 2.5mm; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 3mm;
+    font-size: 9.2pt;
+    break-inside: auto;
+  }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+  th {
+    background: var(--vert);
+    color: #fff;
+    text-align: left;
+    padding: 1.8mm 2.2mm;
+    font-size: 8.6pt;
+    font-weight: 600;
+    letter-spacing: 0.3pt;
+  }
+  td {
+    padding: 1.8mm 2.2mm;
+    border-bottom: 1px solid var(--trait);
+    vertical-align: top;
+  }
+  tbody tr:nth-child(even) { background: #FBF9F3; }
+  td.case { width: 7mm; text-align: center; color: var(--gris); font-size: 12pt; line-height: 1; }
+  td.quoi { width: 38%; }
+
+  .encart {
+    border-left: 3px solid var(--ocre);
+    background: var(--fond-doux);
+    padding: 2.5mm 3mm;
+    margin: 0 0 3.5mm;
+    break-inside: avoid;
+  }
+  .encart.alerte { border-left-color: var(--rouge); background: #FBF0EE; }
+  .encart p:last-child { margin-bottom: 0; }
+  .encart .titre { font-weight: 700; color: var(--vert); margin-bottom: 1mm; }
+  .encart.alerte .titre { color: var(--rouge); }
+
+  code, pre {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8.4pt;
+  }
+  code { background: #EFEBE0; padding: 0.4mm 1mm; border-radius: 1mm; }
+  pre {
+    background: #23231F;
+    color: #F0EDE4;
+    padding: 2.5mm 3mm;
+    border-radius: 1.5mm;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    margin: 0 0 3mm;
+    line-height: 1.4;
+    break-inside: avoid;
+  }
+  pre .c { color: #9BAF96; }
+
+  ol, ul { margin: 0 0 3mm; padding-left: 5mm; }
+  li { margin-bottom: 1.2mm; }
+
+  .identifiants {
+    display: inline-block;
+    background: var(--vert);
+    color: #fff;
+    padding: 2mm 3mm;
+    border-radius: 1.5mm;
+    font-family: Consolas, monospace;
+    font-size: 9.5pt;
+    margin-bottom: 3mm;
+  }
+
+  .saut { break-before: page; }
+  .fin {
+    margin-top: 8mm;
+    padding-top: 2.5mm;
+    border-top: 1px solid var(--trait);
+    font-size: 8.5pt;
+    color: var(--gris);
+  }
+</style>
+</head>
+<body>
+
+<div class="eyebrow">RX Stack — agriculture de précision</div>
+<h1>RX35 — Guide de test sur téléphone</h1>
+<p class="sous-titre">Ce que l'application sait faire, et comment le vérifier point par point sur un vrai appareil Android.</p>
+
+<div class="meta">
+  <span><b>Version</b> 0.1.0</span>
+  <span><b>Fichier</b> app-release.apk (67 Mo)</span>
+  <span><b>Serveur</b> rx35.onrender.com</span>
+  <span><b>Android</b> 6.0 minimum</span>
+</div>
+
+<h2>1. Installer l'application</h2>
+
+<ol>
+  <li>Transférez <code>app-release.apk</code> sur le téléphone (câble USB, Google Drive, ou envoyez-le-vous sur WhatsApp).</li>
+  <li>Ouvrez le fichier depuis le téléphone. Android demandera l'autorisation d'installer depuis cette source : acceptez.</li>
+  <li>Si Play Protect affiche « application non reconnue », choisissez <b>Installer quand même</b>. C'est normal : l'APK est signé par votre propre clé, pas par le Play Store.</li>
+</ol>
+
+<div class="encart">
+  <div class="titre">Deux choses à savoir avant de juger l'application</div>
+  <p><b>a) Le serveur s'endort.</b> L'hébergement est gratuit : après 15 minutes sans activité, il se met en veille et la première connexion prend <b>30 à 60 secondes</b>. Ce n'est pas l'application qui rame. Pour éviter l'attente, ouvrez d'abord <code>https://rx35.onrender.com/health</code> dans le navigateur du téléphone et attendez de voir <code>{"ok":true}</code>.</p>
+  <p><b>b) Il n'y a pas encore de boîtier ESP32.</b> Un compte neuf n'a donc aucune mesure, et l'application affichera « Aucun relevé pour l'instant ». <b>C'est voulu</b> : elle n'invente jamais de chiffres. Utilisez le compte de démonstration ci-dessous, ou simulez un boîtier (section 3).</p>
+</div>
+
+<h2>2. Avec quel compte tester</h2>
+
+<h3>Option A — compte déjà rempli (le plus rapide)</h3>
+<p>Un compte de test existe, avec une parcelle, un boîtier, des relevés et des alertes :</p>
+<div class="identifiants">Numéro : 90778899 &nbsp;·&nbsp; Mot de passe : motdepasse</div>
+
+<h3>Option B — votre propre compte</h3>
+<p>Créez-le depuis l'écran <b>Créer un compte</b>. Il sera vide au départ : passez alors par la section 3 pour lui envoyer des mesures.</p>
+
+<h2>3. Simuler le boîtier depuis votre PC</h2>
+
+<p>Pour voir l'accueil, l'historique et les notifications se remplir sans matériel :</p>
+
+<ol>
+  <li>Dans l'application : <b>Réglages → Boîtiers → Ajouter un boîtier</b>.</li>
+  <li>La clé s'affiche <b>une seule fois</b> — recopiez-la.</li>
+  <li>Sur votre PC, ouvrez <b>PowerShell</b> et collez ceci en remplaçant la clé :</li>
+</ol>
+
+<pre><span class="c"># Envoyer un relevé de capteurs</span>
+$cle = "COLLEZ-VOTRE-CLE-ICI"
+$corps = @{ temperatureC=31.2; humidityAirPct=58; soilMoisturePct=27;
+            waterLevelPct=64; soilPh=6.3; batteryPct=91; lux=920 } | ConvertTo-Json
+Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/sensors' -Method Post `
+  -Headers @{ 'X-Device-Key' = $cle } `
+  -ContentType 'application/json; charset=utf-8' -Body $corps -TimeoutSec 120</pre>
+
+<pre><span class="c"># Déclencher une alerte (pour tester les notifications)</span>
+$corps = @{ type='mouvement'; message='Mouvement détecté près du portail sud' } | ConvertTo-Json
+Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Post `
+  -Headers @{ 'X-Device-Key' = $cle } `
+  -ContentType 'application/json; charset=utf-8' -Body $corps -TimeoutSec 120</pre>
+
+<p>Relancez la première commande plusieurs fois en changeant <code>soilMoisturePct</code> (46, puis 43, puis 39…) : la courbe de l'Historique se dessinera.</p>
+<p>Types d'alerte acceptés : <code>mouvement</code>, <code>niveau_eau</code>, <code>alarme</code>, <code>badge_refuse</code>, <code>info</code>.</p>
+
+<div class="saut"></div>
+
+<h2>4. Ce qu'il faut vérifier</h2>
+
+<h3>Compte et connexion</h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Créer un compte (nom, numéro, mot de passe)</td><td>Vous entrez directement dans l'application ; une parcelle « Ma parcelle » a été créée automatiquement</td></tr>
+    <tr><td class="case">☐</td><td>Mot de passe de moins de 6 caractères</td><td>Refus explicite, avec la raison</td></tr>
+    <tr><td class="case">☐</td><td>Se déconnecter (Réglages → Compte), puis se reconnecter</td><td>Vous retrouvez votre parcelle et vos données</td></tr>
+    <tr><td class="case">☐</td><td>Fermer complètement l'app, la rouvrir</td><td>Vous restez connecté — pas de nouvelle saisie du mot de passe</td></tr>
+    <tr><td class="case">☐</td><td>Mauvais mot de passe</td><td>« Numéro ou mot de passe incorrect » — le message ne dit pas si le numéro existe</td></tr>
+    <tr><td class="case">☐</td><td>Réglages → Compte : changer votre nom, ajouter votre e-mail</td><td>Enregistré ; un e-mail mal formé est refusé</td></tr>
+  </tbody>
+</table>
+
+<h3>Accueil et capteurs</h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Ouvrir l'accueil</td><td>L'anneau affiche l'humidité du sol comparée au seuil de la culture ; sous le seuil il est ocre, au-dessus il est vert</td></tr>
+    <tr><td class="case">☐</td><td>Lire les cartes capteurs</td><td>Température, humidité de l'air, luminosité, pH — exactement les valeurs envoyées par le boîtier</td></tr>
+    <tr><td class="case">☐</td><td>Tirer l'écran vers le bas</td><td>Rafraîchissement, les nouvelles valeurs apparaissent</td></tr>
+    <tr><td class="case">☐</td><td>Compte neuf sans boîtier</td><td>« Aucun relevé pour l'instant. Ajoutez un boîtier dans Réglages » — et <b>aucun chiffre inventé</b></td></tr>
+    <tr><td class="case">☐</td><td>Vérifier la météo</td><td>Prévisions réelles sur 5 jours pour les coordonnées de la parcelle</td></tr>
+  </tbody>
+</table>
+
+<h3>Irrigation</h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Basculer AUTO / MANUEL</td><td>Le changement est immédiat et le mode reste après avoir quitté puis rouvert l'écran</td></tr>
+    <tr><td class="case">☐</td><td>En mode manuel, allumer puis éteindre la pompe</td><td>L'état affiché suit la commande</td></tr>
+    <tr><td class="case">☐</td><td>Fermer l'app, la rouvrir</td><td>La pompe est dans l'état où vous l'aviez laissée — pas remise à zéro</td></tr>
+  </tbody>
+</table>
+
+<h3>Historique</h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Envoyer 3 ou 4 relevés avec des humidités différentes, puis ouvrir Historique</td><td>La courbe suit exactement vos valeurs</td></tr>
+    <tr><td class="case">☐</td><td>Changer de période (Aujourd'hui / 7 jours / 30 jours)</td><td>Le graphique se recalcule</td></tr>
+    <tr><td class="case">☐</td><td>Changer de mesure (Température, pH, Luminosité…)</td><td>La courbe change de grandeur</td></tr>
+    <tr><td class="case">☐</td><td>Regarder « Journal des événements »</td><td><b>Uniquement de vraies alertes</b> envoyées par le boîtier, datées en relatif. Sans alerte : « Aucun événement signalé par le boîtier »</td></tr>
+    <tr><td class="case">☐</td><td>Onglet « Galerie photo »</td><td>Vide tant qu'aucune ESP32-CAM n'envoie de photo — normal</td></tr>
+  </tbody>
+</table>
+
+<h3>Alertes et notifications</h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Premier lancement</td><td>Android demande l'autorisation d'envoyer des notifications : <b>acceptez</b></td></tr>
+    <tr><td class="case">☐</td><td>Application ouverte, déclencher une alerte depuis le PC</td><td>Une notification arrive en moins d'une minute, avec le nom de la parcelle et le message</td></tr>
+    <tr><td class="case">☐</td><td>Application en arrière-plan (bouton Accueil), déclencher une alerte, puis revenir dans l'app</td><td>La notification apparaît au retour au premier plan</td></tr>
+    <tr><td class="case">☐</td><td>Toucher la cloche en haut à droite</td><td>La liste des alertes, la pastille indiquant les non-lues</td></tr>
+    <tr><td class="case">☐</td><td>Marquer une alerte comme lue</td><td>La pastille décroît</td></tr>
+    <tr><td class="case">☐</td><td>Rouvrir l'app plus tard</td><td><b>Pas de rafale</b> de notifications pour les vieilles alertes</td></tr>
+  </tbody>
+</table>
+
+<h3>Fonctionnement hors connexion</h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Consulter l'accueil avec du réseau, puis activer le <b>mode avion</b> et tirer vers le bas</td><td>Bandeau ocre « Hors connexion — dernières données reçues le … » avec la date, et <b>les vraies dernières valeurs</b></td></tr>
+    <tr><td class="case">☐</td><td>Ouvrir l'Historique en mode avion</td><td>La dernière courbe téléchargée, avec le même type de bandeau</td></tr>
+    <tr><td class="case">☐</td><td>Ouvrir la Carte satellite en mode avion</td><td>La dernière carte téléchargée pour cette date</td></tr>
+    <tr><td class="case">☐</td><td>Se déconnecter, puis se reconnecter avec un <b>autre</b> compte, en mode avion</td><td>Aucune donnée du compte précédent ne réapparaît</td></tr>
+    <tr><td class="case">☐</td><td>Compte neuf + mode avion (rien en cache)</td><td>Un message d'erreur clair et un bouton Réessayer — <b>jamais de chiffres inventés</b></td></tr>
+  </tbody>
+</table>
+
+<div class="saut"></div>
+
+<h3>Assistant IA</h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Demander « Mon sol est-il assez humide ? »</td><td>Une réponse en français qui <b>cite vos vraies mesures</b> (humidité, réservoir), pas des généralités</td></tr>
+    <tr><td class="case">☐</td><td>Demander un chiffre que le boîtier n'a pas envoyé</td><td>L'assistant dit qu'il ne l'a pas — il ne doit rien inventer</td></tr>
+    <tr><td class="case">☐</td><td>Lire la mise en forme des réponses</td><td>Du texte simple, <b>sans</b> astérisques <code>**</code> qui traîneraient</td></tr>
+    <tr><td class="case">☐</td><td>Toucher le micro et dicter une question</td><td>Le texte reconnu remplit le champ, vous le relisez avant d'envoyer</td></tr>
+    <tr><td class="case">☐</td><td>Toucher « Écouter » sous une réponse</td><td>Le téléphone lit la réponse à voix haute, en français</td></tr>
+    <tr><td class="case">☐</td><td>Appareil photo → photographier une feuille de plante</td><td>La photo apparaît dans la conversation avec un diagnostic</td></tr>
+    <tr><td class="case">☐</td><td>Quitter puis revenir sur l'Assistant</td><td>La conversation est conservée</td></tr>
+  </tbody>
+</table>
+
+<h3>Parcelles, boîtiers et équipe</h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Réglages → Ajouter une parcelle, puis basculer de l'une à l'autre</td><td>Tous les écrans suivent la parcelle sélectionnée</td></tr>
+    <tr><td class="case">☐</td><td>Modifier nom, culture, date de semis, coordonnées GPS</td><td>Enregistré ; l'accueil et la météo en tiennent compte</td></tr>
+    <tr><td class="case">☐</td><td>Ajouter un boîtier</td><td>La clé s'affiche <b>une seule fois</b>, avec un avertissement</td></tr>
+    <tr><td class="case">☐</td><td>Ajouter un membre par son numéro, en rôle <i>observateur</i></td><td>Il apparaît dans l'équipe</td></tr>
+    <tr><td class="case">☐</td><td><b>Test important :</b> connectez-vous sur un second téléphone avec le compte observateur</td><td>Il voit la parcelle mais <b>ne peut pas commander la pompe</b></td></tr>
+    <tr><td class="case">☐</td><td><b>Test important :</b> un compte totalement étranger</td><td>Il ne voit <b>rien</b> de votre parcelle — comme si elle n'existait pas</td></tr>
+    <tr><td class="case">☐</td><td>Retirer un membre</td><td>Il perd immédiatement l'accès</td></tr>
+  </tbody>
+</table>
+
+<h3>Carte satellite, apparence, divers</h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Ouvrir la Carte satellite, changer de date</td><td>La grille NDVI se recalcule ; la légende explique les cinq zones</td></tr>
+    <tr><td class="case">☐</td><td>Lire la note sous la carte</td><td>Elle dit honnêtement si l'image vient de Sentinel-2 ou si elle est simulée</td></tr>
+    <tr><td class="case">☐</td><td>Réglages → Apparence : Clair / Sombre / Automatique</td><td>Toute l'application suit, y compris après redémarrage</td></tr>
+    <tr><td class="case">☐</td><td>Réglages → À propos</td><td>L'adresse du serveur réellement utilisée s'affiche</td></tr>
+    <tr><td class="case">☐</td><td>Tourner le téléphone, tester en plein soleil</td><td>Texte lisible, boutons assez grands pour des mains gantées</td></tr>
+  </tbody>
+</table>
+
+<h2>5. Ce qui n'est pas un bug</h2>
+
+<div class="encart alerte">
+  <div class="titre">Mot de passe oublié : indisponible pour l'instant</div>
+  <p>L'écran existe et le mécanisme est complet côté serveur, mais <b>aucun service d'envoi d'e-mails n'est configuré</b>. L'application vous le dira franchement : un avertissement rouge s'affiche et le bouton reste grisé.</p>
+  <p>Pour l'activer, il faut un compte SMTP gratuit (Brevo, Resend…) et ajouter <code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASSWORD</code> dans les variables d'environnement du serveur sur Render. Dites-le-moi et je le branche.</p>
+</div>
+
+<table>
+  <thead><tr><th class="quoi">Comportement observé</th><th>Explication</th></tr></thead>
+  <tbody>
+    <tr><td>La première connexion prend 30 à 60 secondes</td><td>Hébergement gratuit : le serveur se réveille. Les suivantes sont rapides.</td></tr>
+    <tr><td>Aucune notification quand l'application est fermée depuis longtemps</td><td>Ce sont des notifications <b>locales</b>, pas du push. Elles fonctionnent quand l'app tourne ou est en arrière-plan récent. Le vrai push demanderait un projet Firebase.</td></tr>
+    <tr><td>La carte satellite indique « Données simulées »</td><td>Les identifiants Copernicus / Sentinel Hub ne sont pas renseignés. Gratuits à obtenir.</td></tr>
+    <tr><td>La galerie photo est vide</td><td>Aucune ESP32-CAM ne pousse encore de photos.</td></tr>
+    <tr><td>Les écrans sont vides sur un compte neuf</td><td>Voulu. L'application préfère ne rien montrer plutôt que d'inventer.</td></tr>
+    <tr><td>Play Protect signale l'application</td><td>APK signé par votre clé, pas distribué par le Play Store.</td></tr>
+  </tbody>
+</table>
+
+<h2>6. Si quelque chose ne marche pas</h2>
+
+<ol>
+  <li><b>Vérifiez le serveur</b> : ouvrez <code>https://rx35.onrender.com/health</code> dans le navigateur du téléphone. Si vous ne voyez pas <code>{"ok":true}</code>, le problème vient du serveur, pas de l'application.</li>
+  <li><b>Vérifiez l'adresse utilisée par l'app</b> : Réglages → À propos.</li>
+  <li><b>Testez le réseau du téléphone</b> : ouvrez n'importe quel site.</li>
+  <li><b>Si l'app se ferme toute seule</b>, notez l'écran exact et ce que vous veniez de faire.</li>
+</ol>
+
+<div class="encart">
+  <div class="titre">Pour me signaler un problème</div>
+  <p>Le plus utile, dans l'ordre : <b>une capture d'écran</b>, <b>l'écran où vous étiez</b>, <b>ce que vous veniez de faire</b>, et <b>l'heure approximative</b> (elle permet de retrouver la trace côté serveur).</p>
+</div>
+
+<div class="fin">
+  RX35 · RX Stack, Lomé · Application 0.1.0 · Guide établi le 20 août 2026.
+  Fonctionnalités vérifiées sur émulateur Android 16 avant livraison : connexion, mesures réelles,
+  notifications d'alerte, cache hors connexion, assistant IA, cloisonnement entre comptes.
+</div>
+
+</body>
+</html>

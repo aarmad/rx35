@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAppTheme } from "@/theme/ThemeContext";
 import { useAuth } from "@/auth/AuthContext";
 import { typography, spacing, radius } from "@/theme/tokens";
-import { demanderCodeReinitialisation } from "@/services/api";
+import { demanderCodeReinitialisation, envoiEmailDisponible } from "@/services/api";
 
 // Deux étapes sur un seul écran : demander le code, puis le saisir avec le
 // nouveau mot de passe. Éviter une navigation supplémentaire garde le
@@ -26,6 +26,16 @@ export default function ForgotPasswordScreen() {
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // null = on ne sait pas encore. Tant que le serveur n'a pas de SMTP, aucun
+  // code ne peut partir : il faut le dire tout de suite plutôt que de
+  // laisser l'agriculteur guetter sa boîte mail.
+  const [emailPossible, setEmailPossible] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    envoiEmailDisponible()
+      .then(setEmailPossible)
+      .catch(() => setEmailPossible(null)); // serveur injoignable : on n'affirme rien
+  }, []);
 
   const demander = async () => {
     setError(null);
@@ -82,6 +92,16 @@ export default function ForgotPasswordScreen() {
               <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 13, marginBottom: spacing.lg }}>
                 Saisissez votre numéro. Si votre compte a une adresse e-mail enregistrée, un code de vérification y sera envoyé.
               </Text>
+
+              {emailPossible === false ? (
+                <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.danger }]}>
+                  <Ionicons name="warning-outline" size={16} color={colors.danger} />
+                  <Text style={{ color: colors.danger, fontFamily: typography.body, fontSize: 12, marginLeft: 6, flex: 1 }}>
+                    L'envoi d'e-mails n'est pas configuré sur ce serveur : aucun code ne partira. Contactez RX Stack
+                    pour réinitialiser votre mot de passe.
+                  </Text>
+                </View>
+              ) : null}
               <Text style={[styles.label, { color: colors.textMuted }]}>Numéro de téléphone</Text>
               <TextInput
                 value={telephone}
@@ -132,8 +152,15 @@ export default function ForgotPasswordScreen() {
 
           <Pressable
             onPress={etape === "demande" ? demander : reinitialiser}
-            disabled={loading}
-            style={[styles.primaryButton, { backgroundColor: colors.primary, opacity: loading ? 0.6 : 1 }]}
+            // Inutile de demander un code que le serveur ne peut pas envoyer.
+            disabled={loading || (etape === "demande" && emailPossible === false)}
+            style={[
+              styles.primaryButton,
+              {
+                backgroundColor: colors.primary,
+                opacity: loading || (etape === "demande" && emailPossible === false) ? 0.4 : 1,
+              },
+            ]}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />

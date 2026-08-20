@@ -307,3 +307,13 @@ export async function getGrowthStage(culture: Culture, datePlantation: string): 
   if (jours <= c.croissance) return `Croissance (jour ${jours})`;
   return `Maturation (jour ${jours})`;
 }
+
+/**
+ * L'envoi d'e-mails est-il configuré côté serveur ?
+ * Sans SMTP, aucun code ne partira : mieux vaut le dire à l'agriculteur
+ * avant qu'il attende un message qui n'arrivera jamais.
+ */
+export async function envoiEmailDisponible(): Promise<boolean> {
+  const r = await apiFetch<{ email: boolean }>("/api/auth/reset-disponible");
+  return r.email;
+}

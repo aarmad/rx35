@@ -102,54 +102,117 @@ dépôt Git, adapté à Node.js.
 
 ## Stockage des données
 
-Pas de base de données externe à installer : tout est écrit dans
-`data/db.json` (créé automatiquement au premier démarrage) et les photos
-dans `data/photos/`. Un choix volontaire pour rester facile à déployer et
-tester à cette étape — à remplacer par une vraie base (Postgres, etc.) avant
-un déploiement à grande échelle avec plusieurs boîtiers/parcelles en
-simultané (voir le commentaire en tête de `src/db/store.ts`).
+**PostgreSQL** (`pg`), schéma dans `src/db/schema.sql`, appliqué
+automatiquement au démarrage. Toutes les requêtes SQL vivent dans
+`src/db/store.ts` — les routes n'écrivent jamais de SQL.
+
+Le stockage a d'abord été un simple fichier `data/db.json`. Il a fallu en
+sortir : sur le plan gratuit de Render, le disque est **effacé à chaque
+redéploiement**, ce qui a été constaté en pratique — comptes et historique
+perdus. `DATABASE_URL` pointe donc vers une base Postgres gérée (Render,
+Neon, Supabase…). En local, un conteneur sur le port 5433 :
+
+```bash
+docker run -d --name rx35-db -p 5433:5432   -e POSTGRES_PASSWORD=rx35dev -e POSTGRES_DB=rx35 postgres:16
+```
+
+Les photos restent des fichiers (`data/photos/`).
+
+## Cloisonnement des données (multi-parcelles)
+
+Tout est rattaché à une **parcelle**. Un utilisateur n'accède qu'aux
+parcelles dont il est membre, avec un rôle :
+
+| Rôle | Peut |
+| --- | --- |
+| `proprietaire` | tout, y compris ajouter/retirer des membres et des boîtiers |
+| `membre` | consulter et **commander la pompe** |
+| `observateur` | consulter seulement |
+
+Un non-membre reçoit **404** et non 403 : savoir qu'une parcelle existe est
+déjà une information. Ce cloisonnement est couvert par une suite de tests
+d'isolation (deux agriculteurs, chacun aveugle à la parcelle de l'autre).
 
 ## Authentification
 
-Deux mécanismes distincts, pour deux appelants différents :
+Trois mécanismes, pour trois appelants :
 
-- **Boîtier → backend** : `X-Device-Key` (clé partagée, `DEVICE_API_KEY`).
-  Pas de notion de compte côté matériel.
-- **Application → backend** : vrais comptes utilisateurs. `POST
+- **Boîtier → backend** : `X-Device-Key`, une clé **propre à chaque
+  boîtier** de la forme `<uuid>.<secret>`, générée à la création du boîtier
+  et affichée une seule fois. Seul son hachage SHA-256 est stocké, et la
+  comparaison est à temps constant. La parcelle est déduite de la clé : un
+  boîtier ne peut écrire que dans la sienne. (Le `DEVICE_API_KEY` unique et
+  partagé des premières versions a disparu — il donnait accès à tout.)
+- **Application → backend** : comptes utilisateurs. `POST
   /api/auth/register` (nom, téléphone, mot de passe ≥ 6 caractères) ou
-  `POST /api/auth/login` renvoient un token JWT, à envoyer ensuite dans
-  `Authorization: Bearer <token>` sur toutes les autres routes `/api/*`
-  (sauf celles réservées au boîtier). Mots de passe hashés avec bcrypt,
-  jamais stockés en clair. Sessions valables 30 jours.
+  `POST /api/auth/login` renvoient un token JWT, à envoyer dans
+  `Authorization: Bearer <token>`. Mots de passe hachés avec bcrypt.
+  Sessions valables 30 jours.
+- **Mot de passe oublié** : voir ci-dessous.
+
+## Mot de passe oublié
+
+`POST /api/auth/forgot` envoie un code à 6 chiffres à l'adresse e-mail du
+compte (l'e-mail est facultatif, renseigné via `PUT /api/auth/me`).
+`POST /api/auth/reset` échange le code contre un nouveau mot de passe et
+connecte l'utilisateur.
+
+Ce qui protège le compte :
+
+- le code est **haché** en base (jamais lisible, même avec un accès SQL) ;
+- il **expire en 15 minutes** et ne sert **qu'une fois** ;
+- **5 essais** ratés le brûlent — il faut en redemander un ;
+- une nouvelle demande **annule** la précédente ;
+- le serveur renvoie **le même message** que le numéro existe ou non, et la
+  **même erreur** pour un code faux, expiré ou un compte inconnu ;
+- le code n'apparaît **jamais** dans une réponse HTTP.
+
+**Envoi de l'e-mail.** Renseignez `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`
+(et `SMTP_PORT`, `SMTP_FROM`) — n'importe quel fournisseur convient (Brevo,
+Resend, Gmail…). **Sans SMTP configuré**, la fonctionnalité reste utilisable
+pour les tests : le code est écrit dans les **logs du serveur** au lieu
+d'être envoyé. `GET /api/auth/reset-disponible` dit à l'app si l'envoi
+d'e-mail est réellement actif, pour qu'elle n'invite pas l'agriculteur à
+attendre un message qui n'arrivera pas.
 
 ## Endpoints
+
+`:p` = identifiant de parcelle. Toutes les routes `/api/parcels/:p/*`
+exigent un token **et** la qualité de membre de cette parcelle.
 
 | Méthode & route | Appelant | Description |
 | --- | --- | --- |
 | `GET /health` | — | Vérification que le serveur tourne |
-| `POST /api/auth/register` | app | Créer un compte (nom, téléphone, mot de passe) |
+| `POST /api/auth/register` | app | Créer un compte (crée aussi sa première parcelle) |
 | `POST /api/auth/login` | app | Se connecter, renvoie un token |
-| `GET /api/auth/me` / `PUT /api/auth/me` | app | Lire / modifier son propre compte |
-| `GET /api/parcel` | app | Infos de la parcelle |
-| `PUT /api/parcel` | app | Mise à jour (nom, culture, date, GPS) |
-| `POST /api/sensors` | boîtier | Envoi d'un relevé capteurs |
-| `GET /api/sensors/latest` | app | Dernier relevé |
-| `GET /api/sensors/history?period=1\|7\|30` | app | Historique (jours) |
-| `POST /api/npk` | boîtier | Envoi d'un relevé sonde NPK |
-| `GET /api/npk/latest` | app | Dernier relevé NPK |
-| `GET /api/irrigation/mode` / `PUT /api/irrigation/mode` | app | Lire/régler auto ou manuel |
-| `GET /api/irrigation/state` | app | Mode **et** état de la pompe, relus à l'ouverture de l'accueil |
-| `PUT /api/irrigation/pump` | app | Commande pompe en mode manuel |
-| `GET /api/irrigation/commands` | boîtier | Le firmware relit ici ce que l'app a demandé |
-| `POST /api/alerts` | boîtier | Nouvel événement (mouvement, alarme, badge refusé...) |
-| `GET /api/alerts` / `GET /api/alerts/unread-count` / `PUT /api/alerts/:id/read` | app | Lecture et gestion des alertes |
-| `POST /api/photos` (multipart, champ `photo`) | boîtier (ESP32-CAM) | Upload d'une capture |
-| `GET /api/photos` / `GET /api/photos/near?timestamp=&tolerance=` | app | Galerie / photo la plus proche d'un événement (`tolerance` en secondes, 1800 par défaut) |
-| `GET /api/weather` | app | Prévisions 5 jours (Open-Meteo, sur les coordonnées de la parcelle) |
-| `GET /api/satellite/dates` / `GET /api/satellite/ndvi?date=` | app | Cartographie NDVI |
-| `GET /api/assistant/history` | app | Historique de conversation |
-| `POST /api/assistant/message` (JSON `{text}`) | app | Message texte à l'assistant |
-| `POST /api/assistant/photo` (multipart, champ `photo`) | app | Diagnostic photo d'une plante |
+| `GET` / `PUT /api/auth/me` | app | Lire / modifier son compte (dont l'e-mail) |
+| `POST /api/auth/forgot` | app | Demander un code de réinitialisation |
+| `POST /api/auth/reset` | app | Nouveau mot de passe via le code |
+| `GET /api/auth/reset-disponible` | app | L'envoi d'e-mail est-il configuré ? |
+| `GET` / `POST /api/parcels` | app | Lister ses parcelles / en créer une |
+| `GET` / `PUT /api/parcels/:p` | app | Infos de la parcelle (nom, culture, date, GPS) |
+| `GET` / `POST /api/parcels/:p/members` | app | Membres ; ajout réservé au propriétaire |
+| `DELETE /api/parcels/:p/members/:userId` | app | Retirer un membre (propriétaire) |
+| `GET` / `POST /api/parcels/:p/devices` | app | Boîtiers ; la création renvoie la clé **une seule fois** |
+| `DELETE /api/parcels/:p/devices/:deviceId` | app | Révoquer un boîtier (propriétaire) |
+| `GET /api/parcels/:p/sensors/latest` | app | Dernier relevé |
+| `GET /api/parcels/:p/sensors/history?period=1\|7\|30` | app | Historique (jours) |
+| `GET /api/parcels/:p/npk/latest` | app | Dernier relevé NPK |
+| `GET /api/parcels/:p/irrigation/state` | app | Mode **et** état de la pompe |
+| `PUT /api/parcels/:p/irrigation/mode` | app | Auto ou manuel (propriétaire/membre) |
+| `PUT /api/parcels/:p/irrigation/pump` | app | Commande pompe (propriétaire/membre) |
+| `GET /api/parcels/:p/alerts` · `/alerts/unread-count` · `PUT /alerts/:id/read` | app | Alertes |
+| `GET /api/parcels/:p/photos` · `/photos/near?timestamp=&tolerance=` | app | Galerie / photo la plus proche (`tolerance` en s, 1800 par défaut) |
+| `GET /api/parcels/:p/weather` | app | Prévisions 5 jours (Open-Meteo, sur les coordonnées GPS) |
+| `GET /api/parcels/:p/satellite/dates` · `/satellite/ndvi?date=` | app | Cartographie NDVI |
+| `GET /api/parcels/:p/assistant/history` | app | Historique de conversation |
+| `POST /api/parcels/:p/assistant/message` (JSON `{text}`) | app | Message à l'assistant |
+| `POST /api/parcels/:p/assistant/photo` (multipart `photo`) | app | Diagnostic photo |
+| `POST /api/device/sensors` | boîtier | Envoi d'un relevé capteurs |
+| `POST /api/device/npk` | boîtier | Envoi d'un relevé sonde NPK |
+| `POST /api/device/alerts` | boîtier | Nouvel événement (mouvement, alarme, badge refusé…) |
+| `POST /api/device/photos` (multipart `photo`) | boîtier (ESP32-CAM) | Upload d'une capture |
+| `GET /api/device/commands` | boîtier | Le firmware relit ce que l'app a demandé |
 
 ## Obtenir les clés API (Anthropic + Sentinel Hub)
 

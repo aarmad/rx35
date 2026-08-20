@@ -5,15 +5,22 @@ cahier de présentation, §13 : Accueil, Carte satellite, Historique, Alertes,
 Assistant IA, Réglages.
 
 **État actuel : connectée au vrai backend.** `src/services/api.ts` appelle
-désormais l'API RX35 réelle (voir `rx35-backend`). `mockApi.ts` reste dans le
-projet comme mode démo hors-ligne (utile pour montrer l'app sans backend
-lancé) mais n'est plus importé par défaut par aucun écran.
+l'API RX35 réelle (voir `rx35-backend`).
+
+**Il n'y a plus aucune donnée de démonstration dans l'application.**
+`mockApi.ts` a été supprimé : il produisait des relevés inventés qui
+s'affichaient à la place des vrais quand le réseau manquait. Un agriculteur
+pouvait alors décider d'arroser en croyant lire son sol. L'application
+affiche désormais soit de vraies mesures, soit les dernières vraies mesures
+reçues (datées à l'écran), soit un message disant clairement qu'elle n'a
+rien — jamais un chiffre fabriqué. Voir « Fonctionnement hors connexion ».
 
 ## Installation
 
-> ⚠️ **L'application ne se lance plus dans Expo Go.** La dictée vocale utilise
-> la reconnaissance vocale native d'Android (`@jamsch/expo-speech-recognition`),
-> un module natif absent d'Expo Go. Il faut donc un **build de développement** :
+> ⚠️ **L'application ne se lance plus dans Expo Go.** Deux modules natifs en
+> sont absents : la reconnaissance vocale d'Android
+> (`@jamsch/expo-speech-recognition`) pour la dictée, et `expo-notifications`
+> pour les alertes. Il faut donc un **build de développement** :
 >
 > ```bash
 > cd rx35-app
@@ -58,11 +65,17 @@ un émulateur Android tournant sur la même machine que le backend.
 Scannez le QR code avec l'app Expo Go (Android/iOS), ou lancez un
 simulateur (`npx expo start --ios` / `--android`).
 
-**Vérification effectuée avant livraison** : `npm install` puis
-`npx tsc --noEmit` passent sans erreur, et tous les noms d'icônes Ionicons
-utilisés ont été vérifiés comme existants. Le rendu visuel réel sur
-appareil/simulateur n'a en revanche pas pu être testé dans cet
-environnement — à vérifier à la première exécution.
+## Tests
+
+```bash
+npm run typecheck   # tsc --noEmit
+npm test            # cache hors connexion (tests/cache.test.js)
+```
+
+`npm test` exécute le vrai code de `src/services/cache.ts` en remplaçant
+seulement le stockage. Il vérifie le point qui compte : **ne jamais afficher
+de chiffre inventé** — réseau coupé avec cache ⇒ dernières vraies données
+horodatées ; réseau coupé sans cache ⇒ erreur à l'écran, et rien d'autre.
 
 ## Authentification
 
@@ -79,6 +92,53 @@ lecture du profil → modification → accès protégé avec/sans token →
 reconnexion), en reproduisant exactement les appels que fait
 `src/services/api.ts`. Le rendu réel des écrans de connexion sur un appareil
 n'a en revanche pas pu être testé ici.
+
+## Mot de passe oublié
+
+Un agriculteur qui perd son mot de passe ne doit pas perdre sa parcelle.
+L'écran de connexion propose « Mot de passe oublié ? » :
+
+1. il saisit son numéro ;
+2. un **code à 6 chiffres** est envoyé à l'adresse e-mail de son compte ;
+3. il saisit le code et choisit un nouveau mot de passe ; il est connecté.
+
+L'e-mail est **facultatif** et se renseigne dans Réglages → Compte. Sans
+e-mail, la réinitialisation est impossible : l'écran le dit plutôt que de
+laisser l'agriculteur attendre un message qui n'arrivera pas.
+
+Côté sécurité (détails dans `rx35-backend/README.md`) : le code est haché en
+base, expire en 15 minutes, ne sert qu'une fois, et 5 essais ratés le
+brûlent. Le serveur répond **la même chose** que le numéro existe ou non —
+impossible de deviner qui est client de RX35.
+
+## Notifications d'alerte
+
+L'application surveille les alertes de la parcelle courante et déclenche une
+notification système (mouvement, niveau d'eau critique, badge refusé…), sans
+que l'agriculteur ait à ouvrir l'écran Alertes.
+
+> **Limite assumée : ce sont des notifications *locales*, pas du push.**
+> L'application interroge le serveur toutes les 60 secondes *pendant qu'elle
+> tourne*, et à chaque retour au premier plan. Elle ne réveille donc pas un
+> téléphone dont l'app est fermée depuis longtemps. De vraies notifications
+> push exigeraient un projet Firebase (FCM) — possible plus tard sans rien
+> changer aux écrans, seul `src/alerts/useAlertNotifications.ts` bougerait.
+
+Au premier passage, les alertes déjà présentes sont enregistrées **sans**
+notifier : ouvrir l'app ne déclenche pas une rafale pour de vieux événements.
+
+## Fonctionnement hors connexion
+
+Chaque écran de données passe par `avecCache()` (`src/services/cache.ts`) :
+
+1. il tente le réseau ; en cas de succès la réponse est affichée **et** mise
+   en cache (`expo-file-system`) ;
+2. en cas d'échec, il ressort la dernière valeur mise en cache, avec la date
+   de réception affichée à l'écran ;
+3. si le cache est vide lui aussi, l'erreur remonte et l'écran le dit.
+
+Le cache est **vidé à la déconnexion** : les données d'un compte ne
+réapparaissent pas sous le compte suivant sur le même téléphone.
 
 ## Identité visuelle
 
@@ -117,7 +177,9 @@ src/services/types.ts          Types partagés (alignés sur le firmware)
 src/services/config.ts         Adresse du backend (lue depuis .env)
 src/services/api.ts            Appels au vrai backend RX35 (utilisé par tous les écrans)
 src/services/authStore.ts      Token de session (SecureStore) + signal de session expirée
-src/services/mockApi.ts        Données de démonstration, repli quand le boîtier n'a rien envoyé
+src/services/cache.ts          Cache hors connexion (dernières vraies données, datées)
+src/alerts/                    Sondage des alertes + notifications système
+src/parcels/                   Parcelle courante, rôles, cloisonnement multi-comptes
 src/components/                RadialGauge, SensorCard, Screen, ScreenHeader...
 src/navigation/RootNavigator   Navigation par onglets (6 écrans)
 src/screens/                   Accueil, Carte, Historique, Alertes, Assistant, Réglages
@@ -158,11 +220,11 @@ tels quels à l'agriculteur (voir `FORMAT_RULE` dans
 
 La liaison app ↔ backend est explicite plutôt que silencieuse :
 
-- **Accueil** : affiche « Connexion au serveur impossible » avec l'adresse
-  utilisée et un bouton *Réessayer*, au lieu de tourner indéfiniment.
-- **Historique** : bascule sur la série de démonstration, avec le bandeau qui
-  le signale.
-- **Carte / Alertes / Réglages** : affichent le message d'erreur du serveur.
+- **Accueil / Historique / Carte** : ressortent les **dernières vraies
+  données reçues**, avec un bandeau « Hors connexion — dernières données
+  reçues le … ». Si rien n'a jamais été reçu, l'écran le dit (« Aucun relevé
+  pour l'instant ») et propose *Réessayer* — il n'invente rien.
+- **Alertes / Réglages** : affichent le message d'erreur du serveur.
 - **Assistant IA** : la réponse d'erreur (ex. `ANTHROPIC_API_KEY` absente
   côté backend) s'affiche dans le fil de discussion, la saisie ne reste pas
   bloquée sur « envoi en cours ».

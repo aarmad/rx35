@@ -7,9 +7,9 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { useAppTheme } from "@/theme/ThemeContext";
 import { useParcel } from "@/parcels/ParcelContext";
 import { typography, spacing, radius } from "@/theme/tokens";
-import { getSensorHistory, getPhotos, getPhotoNear } from "@/services/api";
+import { getSensorHistory, getPhotos, getPhotoNear, getAlerts } from "@/services/api";
 import { avecCache } from "@/services/cache";
-import { PhotoItem, SensorSnapshot } from "@/services/types";
+import { AlertItem, PhotoItem, SensorSnapshot } from "@/services/types";
 
 type Period = 1 | 7 | 30;
 type Tab = "mesures" | "galerie";
@@ -28,6 +28,26 @@ function timeLabel(ts: number) {
   return `${d.getDate()}/${d.getMonth() + 1} ${d.getHours()}h${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+/** « il y a 40 min », « il y a 3h », « il y a 2 j » — plus parlant qu'une date. */
+function ilYA(ts: number): string {
+  const minutes = Math.max(0, Math.round(Date.now() / 1000 - ts) / 60);
+  if (minutes < 1) return "à l'instant";
+  if (minutes < 60) return `il y a ${Math.round(minutes)} min`;
+  const heures = minutes / 60;
+  if (heures < 24) return `il y a ${Math.round(heures)}h`;
+  const jours = Math.round(heures / 24);
+  return `il y a ${jours} j`;
+}
+
+// Chaque type d'alerte du boîtier a son icône et sa couleur.
+const APPARENCE: Record<AlertItem["type"], { icon: string; colorKey: "success" | "accent" }> = {
+  mouvement: { icon: "walk", colorKey: "accent" },
+  niveau_eau: { icon: "water", colorKey: "accent" },
+  alarme: { icon: "alert", colorKey: "accent" },
+  badge_refuse: { icon: "key", colorKey: "accent" },
+  info: { icon: "information-circle", colorKey: "success" },
+};
+
 export default function HistoryScreen() {
   const { colors } = useAppTheme();
   const { current: parcel } = useParcel();
@@ -37,7 +57,9 @@ export default function HistoryScreen() {
   const [metricIndex, setMetricIndex] = useState(1);
   const [loading, setLoading] = useState(true);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
-  const [eventPhoto, setEventPhoto] = useState<PhotoItem | null>(null);
+  const [evenements, setEvenements] = useState<AlertItem[]>([]);
+  // Photo capturée au moment d'un événement, indexée par identifiant d'alerte.
+  const [photosEvenement, setPhotosEvenement] = useState<Record<string, PhotoItem>>({});
   const [viewerPhoto, setViewerPhoto] = useState<PhotoItem | null>(null);
   const [horsConnexion, setHorsConnexion] = useState<number | null>(null);
 
@@ -62,11 +84,33 @@ export default function HistoryScreen() {
     avecCache(`${parcel!.id}:photos`, () => getPhotos(parcel!.id))
       .then((r) => setPhotos(r.data))
       .catch(() => setPhotos([]));
-    // Photo associée à l'événement "mouvement détecté" affiché dans le journal
-    getPhotoNear(parcel!.id, Date.now() / 1000 - 3600)
-      .then(setEventPhoto)
-      .catch(() => setEventPhoto(null));
-  }, []);
+
+    // Journal des événements : les vraies alertes remontées par le boîtier.
+    // (Il affichait autrefois trois lignes écrites en dur — une irrigation
+    // et un mouvement qui n'avaient jamais eu lieu.)
+    avecCache(`${parcel!.id}:alertes`, () => getAlerts(parcel!.id))
+      .then(async (r) => {
+        const derniers = [...r.data].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
+        setEvenements(derniers);
+        // Le boîtier photographie ce qui bouge : on rattache l'image à
+        // l'événement pour que l'agriculteur voie de quoi il s'agit.
+        const trouvees: Record<string, PhotoItem> = {};
+        await Promise.all(
+          derniers
+            .filter((a) => a.type === "mouvement")
+            .map(async (a) => {
+              try {
+                const p = await getPhotoNear(parcel!.id, a.timestamp);
+                if (p) trouvees[a.id] = p;
+              } catch {
+                // Pas de photo pour cet événement : la ligne s'affiche sans.
+              }
+            })
+        );
+        setPhotosEvenement(trouvees);
+      })
+      .catch(() => setEvenements([]));
+  }, [parcel?.id]);
 
   const metric = METRICS[metricIndex];
   const values = history.map((h) => Number(h[metric.key]));
@@ -183,16 +227,26 @@ export default function HistoryScreen() {
             Journal des événements
           </Text>
           <View style={[styles.eventCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <EventRow icon="water" label="Irrigation démarrée automatiquement" time="il y a 3h" colorKey="success" />
-            <EventRow icon="water" label="Irrigation arrêtée (seuil atteint)" time="il y a 2h45" colorKey="success" />
-            <EventRow
-              icon="walk"
-              label="Mouvement détecté"
-              time="il y a 1h"
-              colorKey="accent"
-              photo={eventPhoto ?? undefined}
-              onPhotoPress={() => eventPhoto && setViewerPhoto(eventPhoto)}
-            />
+            {evenements.length === 0 ? (
+              <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 13 }}>
+                Aucun événement signalé par le boîtier pour l'instant.
+              </Text>
+            ) : (
+              evenements.map((e) => {
+                const photo = photosEvenement[e.id];
+                return (
+                  <EventRow
+                    key={e.id}
+                    icon={APPARENCE[e.type].icon}
+                    label={e.message}
+                    time={ilYA(e.timestamp)}
+                    colorKey={APPARENCE[e.type].colorKey}
+                    photo={photo}
+                    onPhotoPress={() => photo && setViewerPhoto(photo)}
+                  />
+                );
+              })
+            )}
           </View>
         </>
       ) : (

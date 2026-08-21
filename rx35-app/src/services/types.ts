@@ -22,6 +22,8 @@ export interface SensorSnapshot {
   flowTotalL: number;
   batteryPct: number;
   motion: boolean;
+  /** true = releve de test declenche depuis l application, pas une mesure. */
+  simule?: boolean;
 }
 
 export interface NpkSnapshot {
@@ -60,7 +62,16 @@ export interface DeviceInfo {
 export interface AlertItem {
   id: string;
   timestamp: number;
-  type: "mouvement" | "niveau_eau" | "alarme" | "badge_refuse" | "info";
+  type:
+    | "mouvement"
+    // Un PIR seul ne sait pas trancher : il envoie "mouvement".
+    // Un boitier avec camera et classification precise l espece.
+    | "presence_humaine"
+    | "passage_animal"
+    | "niveau_eau"
+    | "alarme"
+    | "badge_refuse"
+    | "info";
   message: string;
   lu: boolean;
 }

@@ -178,5 +178,26 @@ console.log("\n13. Tout va bien");
   verifier("dit que rien n'est à signaler", r.length === 1 && r[0].id === "rien-a-signaler");
 }
 
+
+console.log("\n14. Alertes graduées : humain, animal, indéterminé");
+{
+  const a = (h, type) => ({ id: String(Math.random()), timestamp: maintenant() - h * 3600, type, message: '', lu: false });
+
+  const humain = construireRecommandations(ctx({ alertes: [a(2, 'presence_humaine')] }));
+  verifier('une SEULE presence humaine declenche une alerte', ids(humain).includes('presence-humaine'));
+  verifier('et elle est urgente', trouver(humain, 'presence-humaine').priorite === 'urgent');
+
+  const unAnimal = construireRecommandations(ctx({ alertes: [a(2, 'passage_animal')] }));
+  verifier('un seul passage d animal ne declenche rien', !ids(unAnimal).includes('passages-animaux'));
+
+  const animaux = construireRecommandations(ctx({ alertes: [a(2,'passage_animal'), a(6,'passage_animal'), a(20,'passage_animal')] }));
+  verifier('trois passages d animaux : conseil de cloture', ids(animaux).includes('passages-animaux'));
+  verifier('mais pas urgent, contrairement a un humain', trouver(animaux, 'passages-animaux').priorite === 'important');
+
+  const flous = construireRecommandations(ctx({ alertes: [a(2,'mouvement'), a(6,'mouvement'), a(20,'mouvement')] }));
+  verifier('mouvements non identifies comptes a part', ids(flous).includes('intrusions-repetees'));
+  verifier('ils ne sont pas pris pour des humains', !ids(flous).includes('presence-humaine'));
+}
+
 console.log(echecs === 0 ? "\nToutes les règles agronomiques passent.\n" : `\n${echecs} test(s) en échec.\n`);
 process.exit(echecs === 0 ? 0 : 1);

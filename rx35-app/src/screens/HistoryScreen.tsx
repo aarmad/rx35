@@ -42,6 +42,9 @@ function ilYA(ts: number): string {
 // Chaque type d'alerte du boîtier a son icône et sa couleur.
 const APPARENCE: Record<AlertItem["type"], { icon: string; colorKey: "success" | "accent" }> = {
   mouvement: { icon: "walk", colorKey: "accent" },
+  presence_humaine: { icon: "body", colorKey: "accent" },
+  // Un passage d'animal est une information, pas une alerte de sécurité.
+  passage_animal: { icon: "paw", colorKey: "success" },
   niveau_eau: { icon: "water", colorKey: "accent" },
   alarme: { icon: "alert", colorKey: "accent" },
   badge_refuse: { icon: "key", colorKey: "accent" },

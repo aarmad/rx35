@@ -171,3 +171,22 @@ CREATE TABLE IF NOT EXISTS password_resets (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_resets_user ON password_resets(user_id, expires_at DESC);
+
+-- ============================================================
+-- Migration : alertes de présence graduées (rapport de test, §4).
+--
+-- Une intrusion humaine et le passage d'une chèvre ne méritent pas la
+-- même réaction. On distingue donc les deux du simple « mouvement »,
+-- qui reste accepté pour un capteur PIR incapable de trancher.
+--   presence_humaine -> notification critique (son, priorité haute)
+--   passage_animal   -> notification informative (silencieuse)
+-- ============================================================
+ALTER TABLE alerts DROP CONSTRAINT IF EXISTS alerts_type_check;
+ALTER TABLE alerts ADD CONSTRAINT alerts_type_check
+  CHECK (type IN ('mouvement','presence_humaine','passage_animal',
+                  'niveau_eau','alarme','badge_refuse','info'));
+
+-- Les relevés déclenchés depuis l'application pour tester le système sans
+-- boîtier physique sont marqués : ils ne doivent JAMAIS passer pour des
+-- mesures réelles dans l'historique.
+ALTER TABLE sensor_readings ADD COLUMN IF NOT EXISTS simule BOOLEAN NOT NULL DEFAULT false;

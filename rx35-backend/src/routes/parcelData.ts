@@ -8,6 +8,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import multer from "multer";
 import {
+  addSensorSnapshot,
   getLatestSensorSnapshot,
   getSensorHistory,
   getLatestNpkSnapshot,
@@ -50,6 +51,40 @@ parcelDataRouter.get("/sensors/history", async (req, res, next) => {
     const period = Number(req.query.period ?? 7);
     const since = Date.now() / 1000 - period * 86400;
     res.json(await getSensorHistory(req.parcelId!, since));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Relevé de test ----------------------------------------------------
+// Le rapport de test demandait de pouvoir faire varier les mesures pour
+// valider le système sans boîtier physique. Ce relevé est enregistré avec
+// simule = true : il alimente les écrans et les conseils, mais l'historique
+// le distingue d'une vraie mesure. Réservé au propriétaire de la parcelle.
+parcelDataRouter.post("/simulation/releve", requireRole("proprietaire"), async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const nombre = (v: any, defaut: number) => (typeof v === "number" && isFinite(v) ? v : defaut);
+    const alea = (min: number, max: number) => Math.round(min + Math.random() * (max - min));
+
+    // Sans valeur fournie, on tire au hasard : le but est justement de VOIR
+    // les écrans bouger, ce qu'une valeur fixe ne permet pas.
+    await addSensorSnapshot(req.parcelId!, {
+      timestamp: Date.now() / 1000,
+      temperatureC: nombre(b.temperatureC, alea(24, 36)),
+      humidityAirPct: nombre(b.humidityAirPct, alea(45, 85)),
+      pressureHpa: nombre(b.pressureHpa, 1012),
+      lux: nombre(b.lux, alea(200, 1100)),
+      soilMoisturePct: nombre(b.soilMoisturePct, alea(15, 90)),
+      soilPh: nombre(b.soilPh, 6.3),
+      waterLevelPct: nombre(b.waterLevelPct, alea(5, 100)),
+      flowLpm: nombre(b.flowLpm, 0),
+      flowTotalL: nombre(b.flowTotalL, 0),
+      batteryPct: nombre(b.batteryPct, alea(30, 100)),
+      motion: !!b.motion,
+      simule: true,
+    });
+    res.status(201).json({ ok: true });
   } catch (e) {
     next(e);
   }

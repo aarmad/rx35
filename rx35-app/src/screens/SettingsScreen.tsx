@@ -15,6 +15,7 @@ import {
   removeMember,
   listDevices,
   createDevice,
+  envoyerReleveDeTest,
   deleteDevice,
 } from "@/services/api";
 import { API_BASE_URL } from "@/services/config";
@@ -127,6 +128,23 @@ export default function SettingsScreen() {
         },
       },
     ]);
+  };
+
+  const envoyerTest = async () => {
+    if (!current) return;
+    setBusy(true);
+    try {
+      await envoyerReleveDeTest(current.id);
+      Alert.alert(
+        "Relevé de test envoyé",
+        "Revenez sur l'accueil : les valeurs et les conseils se mettent à jour dans les 15 secondes. " +
+          "Ce relevé est marqué « test » et ne sera jamais confondu avec une mesure du terrain."
+      );
+    } catch (e: any) {
+      Alert.alert("Envoi impossible", e?.message ?? "Réessayez.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   // La clé n'est lisible qu'à la création : on la met immédiatement à
@@ -320,6 +338,43 @@ export default function SettingsScreen() {
               </Pressable>
             ) : null}
           </View>
+
+          {/* --- Relevé de test ---
+              Sans boîtier physique, il était impossible de faire varier les
+              mesures et donc de vérifier que le système réagit (rapport de
+              test §1). Ce relevé est enregistré comme SIMULÉ et signalé
+              partout où il s'affiche : il ne doit jamais se faire passer
+              pour une mesure du terrain. */}
+          {estProprietaire ? (
+            <>
+              <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>
+                Tester sans boîtier
+              </Text>
+              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 13, marginBottom: spacing.sm }}>
+                  Génère un relevé aux valeurs tirées au hasard, pour voir l'accueil, l'historique et les conseils
+                  réagir en attendant le matériel. Ces relevés sont marqués « test » et se distinguent des vraies
+                  mesures.
+                </Text>
+                <Pressable
+                  onPress={envoyerTest}
+                  disabled={busy}
+                  style={[styles.addRow, { borderColor: colors.border }]}
+                >
+                  {busy ? (
+                    <ActivityIndicator color={colors.primary} size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="flask-outline" size={18} color={colors.primary} />
+                      <Text style={{ color: colors.primary, fontFamily: typography.bodyMedium, fontSize: 13, marginLeft: 6 }}>
+                        Envoyer un relevé de test
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            </>
+          ) : null}
 
           {/* --- Équipe --- */}
           <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>

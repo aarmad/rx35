@@ -328,3 +328,22 @@ export async function envoiEmailDisponible(): Promise<boolean> {
 export async function getRecommandations(parcelId: string): Promise<Recommandation[]> {
   return apiFetch<Recommandation[]>(`/api/parcels/${parcelId}/recommandations`);
 }
+
+/**
+ * Injecte un relevé de TEST dans la parcelle (propriétaire seulement).
+ * Répond au rapport de test : sans boîtier physique, il était impossible
+ * de faire varier les mesures et donc de valider le système.
+ *
+ * Le relevé est marqué `simule` en base et signalé à l'écran : un chiffre
+ * de test ne doit jamais pouvoir passer pour une mesure du terrain.
+ * Sans valeurs fournies, le serveur en tire au hasard.
+ */
+export async function envoyerReleveDeTest(
+  parcelId: string,
+  valeurs?: Partial<SensorSnapshot>
+): Promise<void> {
+  await apiFetch(`/api/parcels/${parcelId}/simulation/releve`, {
+    method: "POST",
+    body: JSON.stringify(valeurs ?? {}),
+  });
+}

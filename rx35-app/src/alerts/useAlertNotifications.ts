@@ -17,19 +17,44 @@ import * as Notifications from "expo-notifications";
 import { getAlerts } from "@/services/api";
 import { AlertItem } from "@/services/types";
 
-// Les alertes justifient d'interrompre : intrusion, niveau d'eau critique.
+// Alertes graduées (rapport de test, §4) : toutes les détections ne se
+// valent pas. Réveiller quelqu'un la nuit pour une chèvre le pousserait à
+// couper les notifications — et il raterait la vraie intrusion.
+//   CRITIQUE     : son + priorité haute (présence humaine, alarme, eau)
+//   INFORMATIVE  : silencieuse (passage d'animal, information)
+type Gravite = "critique" | "informative";
+
+const GRAVITE: Record<AlertItem["type"], Gravite> = {
+  presence_humaine: "critique",
+  alarme: "critique",
+  niveau_eau: "critique",
+  badge_refuse: "critique",
+  // Un PIR seul ne sait pas ce qu'il a vu : dans le doute on prévient
+  // franchement, quitte à ce que ce ne soit qu'un animal.
+  mouvement: "critique",
+  passage_animal: "informative",
+  info: "informative",
+};
+
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (n) => {
+    const critique = n.request.content.data?.gravite !== "informative";
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: critique,
+      shouldSetBadge: false,
+    };
+  },
 });
 
-const INTERVALLE_MS = 60_000;
+// 15 s, comme demandé au rapport de test. Le sondage s'arrête dès que
+// l'application quitte le premier plan (voir plus bas).
+const INTERVALLE_MS = 15_000;
 
 const TITRES: Record<AlertItem["type"], string> = {
   mouvement: "Mouvement détecté",
+  presence_humaine: "Présence humaine sur la parcelle",
+  passage_animal: "Passage d'animal",
   niveau_eau: "Niveau d'eau critique",
   alarme: "Alarme déclenchée",
   badge_refuse: "Badge refusé",
@@ -61,10 +86,17 @@ export function useAlertNotifications(parcelId: string | null, nomParcelle?: str
         const nouvelles = alertes.filter((a) => !connues.current!.has(a.id) && !a.lu);
         for (const a of nouvelles) {
           connues.current.add(a.id);
+          const gravite = GRAVITE[a.type] ?? "critique";
           await Notifications.scheduleNotificationAsync({
             content: {
               title: TITRES[a.type],
               body: nomParcelle ? `${nomParcelle} — ${a.message}` : a.message,
+              data: { gravite },
+              sound: gravite === "critique",
+              priority:
+                gravite === "critique"
+                  ? Notifications.AndroidNotificationPriority.HIGH
+                  : Notifications.AndroidNotificationPriority.LOW,
             },
             trigger: null, // immédiat
           });
@@ -85,15 +117,32 @@ export function useAlertNotifications(parcelId: string | null, nomParcelle?: str
       verifier();
     })();
 
-    const timer = setInterval(verifier, INTERVALLE_MS);
-    // Un retour au premier plan est le moment où l'agriculteur veut savoir.
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const demarrer = () => {
+      if (!timer) timer = setInterval(verifier, INTERVALLE_MS);
+    };
+    const arreter = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+    };
+    demarrer();
+
     const sub = AppState.addEventListener("change", (etat) => {
-      if (etat === "active") verifier();
+      if (etat === "active") {
+        // Un retour au premier plan est le moment où l'agriculteur veut savoir.
+        verifier();
+        demarrer();
+      } else {
+        // En arrière-plan, sonder toutes les 15 s viderait la batterie sans
+        // que personne ne regarde. Ces notifications sont locales : elles ne
+        // fonctionnent que lorsque l'application tourne (voir l'en-tête).
+        arreter();
+      }
     });
 
     return () => {
       actif = false;
-      clearInterval(timer);
+      arreter();
       sub.remove();
     };
   }, [parcelId, nomParcelle]);

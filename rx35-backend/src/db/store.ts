@@ -53,6 +53,12 @@ export interface SensorSnapshot {
   flowTotalL: number;
   batteryPct: number;
   motion: boolean;
+  /**
+   * true = relevé de test déclenché depuis l'application, pas une mesure
+   * du terrain. Marqué en base et affiché comme tel : un chiffre de test
+   * ne doit jamais pouvoir passer pour une mesure réelle.
+   */
+  simule?: boolean;
 }
 
 export interface NpkSnapshot {
@@ -66,7 +72,16 @@ export interface NpkSnapshot {
 export interface AlertItem {
   id: string;
   timestamp: number;
-  type: "mouvement" | "niveau_eau" | "alarme" | "badge_refuse" | "info";
+  type:
+    | "mouvement"
+    // Distinction demandee au rapport de test : une intrusion humaine
+    // et le passage d une chevre n appellent pas la meme reaction.
+    | "presence_humaine"
+    | "passage_animal"
+    | "niveau_eau"
+    | "alarme"
+    | "badge_refuse"
+    | "info";
   message: string;
   lu: boolean;
 }
@@ -413,6 +428,7 @@ function rowToSnapshot(r: any): SensorSnapshot {
     flowTotalL: Number(r.flow_total_l),
     batteryPct: Number(r.battery_pct),
     motion: !!r.motion,
+    simule: !!r.simule,
   };
 }
 
@@ -420,12 +436,13 @@ export async function addSensorSnapshot(parcelId: string, s: SensorSnapshot): Pr
   await pool.query(
     `INSERT INTO sensor_readings
        (id, parcel_id, recorded_at, temperature_c, humidity_air_pct, pressure_hpa, lux,
-        soil_moisture_pct, soil_ph, water_level_pct, flow_lpm, flow_total_l, battery_pct, motion)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        soil_moisture_pct, soil_ph, water_level_pct, flow_lpm, flow_total_l, battery_pct, motion, simule)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
     [
       crypto.randomUUID(), parcelId, fromEpoch(s.timestamp),
       s.temperatureC, s.humidityAirPct, s.pressureHpa, s.lux,
       s.soilMoisturePct, s.soilPh, s.waterLevelPct, s.flowLpm, s.flowTotalL, s.batteryPct, s.motion,
+      s.simule ?? false,
     ]
   );
 }

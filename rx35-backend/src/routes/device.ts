@@ -93,7 +93,18 @@ deviceRouter.post("/npk", async (req, res, next) => {
 
 deviceRouter.post("/alerts", async (req, res, next) => {
   const { type, message } = req.body ?? {};
-  const types = ["mouvement", "niveau_eau", "alarme", "badge_refuse", "info"];
+  // "mouvement" reste accepté pour un PIR seul, incapable de distinguer.
+  // Un boîtier équipé d'une caméra et d'une classification remonte
+  // directement "presence_humaine" ou "passage_animal".
+  const types = [
+    "mouvement",
+    "presence_humaine",
+    "passage_animal",
+    "niveau_eau",
+    "alarme",
+    "badge_refuse",
+    "info",
+  ];
   if (!types.includes(type) || typeof message !== "string" || !message.trim()) {
     return res.status(400).json({ error: `Champs 'type' (${types.join("|")}) et 'message' requis.` });
   }

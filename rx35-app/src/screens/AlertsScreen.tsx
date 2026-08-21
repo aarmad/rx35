@@ -12,6 +12,8 @@ import { AlertItem } from "@/services/types";
 
 const FILTERS: { key: AlertItem["type"] | "tous"; label: string }[] = [
   { key: "tous", label: "Toutes" },
+  { key: "presence_humaine", label: "Présence" },
+  { key: "passage_animal", label: "Animaux" },
   { key: "mouvement", label: "Mouvement" },
   { key: "niveau_eau", label: "Niveau d'eau" },
   { key: "alarme", label: "Alarme" },
@@ -20,6 +22,8 @@ const FILTERS: { key: AlertItem["type"] | "tous"; label: string }[] = [
 
 const ICONS: Record<AlertItem["type"], keyof typeof Ionicons.glyphMap> = {
   mouvement: "walk-outline",
+  presence_humaine: "body-outline",
+  passage_animal: "paw-outline",
   niveau_eau: "water-outline",
   alarme: "alert-circle-outline",
   badge_refuse: "card-outline",

@@ -313,16 +313,47 @@ export function construireRecommandations(ctx: ContexteParcelle): Recommandation
 
   // --- Sécurité de la parcelle ------------------------------------------
   const recentes = ctx.alertes.filter((a) => maintenant - a.timestamp < 48 * 3600);
-  const mouvements = recentes.filter((a) => a.type === "mouvement").length;
-  if (mouvements >= 3) {
+  const humains = recentes.filter((a) => a.type === "presence_humaine").length;
+  const animaux = recentes.filter((a) => a.type === "passage_animal").length;
+  // Un PIR seul ne sait pas ce qu'il a vu : ces détections restent
+  // indéterminées et sont comptées à part.
+  const indetermines = recentes.filter((a) => a.type === "mouvement").length;
+
+  // Une présence humaine non attendue relève de la sécurité, pas de
+  // l'agronomie : une seule suffit à justifier une alerte.
+  if (humains >= 1) {
+    out.push({
+      id: "presence-humaine",
+      priorite: "urgent",
+      titre: humains === 1 ? "Présence humaine détectée sur la parcelle" : `${humains} présences humaines détectées`,
+      detail:
+        "Vérifiez la parcelle et l'état des récoltes. Si ces passages sont légitimes (ouvrier, voisin), " +
+        "ajoutez la personne à l'équipe dans Réglages pour ne plus être alerté inutilement.",
+      fondement: [`${humains} détection(s) de présence humaine sur les 48 dernières heures`],
+    });
+  }
+
+  if (animaux >= 3) {
+    out.push({
+      id: "passages-animaux",
+      priorite: "important",
+      titre: "Passages d'animaux répétés",
+      detail:
+        "Renforcez le grillage sur la zone concernée : c'est plus efficace qu'une surveillance. " +
+        "Contrôlez l'état des cultures en bordure, ce sont elles qui souffrent en premier.",
+      fondement: [`${animaux} passages d'animaux sur les 48 dernières heures`],
+    });
+  }
+
+  if (indetermines >= 3) {
     out.push({
       id: "intrusions-repetees",
       priorite: "important",
       titre: "Passages répétés détectés",
       detail:
-        "Plusieurs détections en 48 h : contrôlez la clôture et l'état des cultures en bordure. " +
-        "S'il s'agit d'animaux, un renforcement du grillage sur la zone concernée est plus efficace qu'une surveillance.",
-      fondement: [`${mouvements} détections de mouvement sur les 48 dernières heures`],
+        "Plusieurs détections en 48 h, sans que le boîtier puisse dire s'il s'agit de personnes ou d'animaux. " +
+        "Contrôlez la clôture et l'état des cultures en bordure. Une caméra permettrait de trancher.",
+      fondement: [`${indetermines} détections de mouvement non identifiées sur les 48 dernières heures`],
     });
   }
   if (recentes.some((a) => a.type === "alarme")) {

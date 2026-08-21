@@ -46,7 +46,13 @@ const SILENCE_SUSPECT_S = 3 * 3600;
 
 // L'écran se rafraîchit seul : un agriculteur qui surveille son irrigation
 // ne doit pas avoir à deviner si ce qu'il voit est encore d'actualité.
-const RAFRAICHISSEMENT_MS = 60_000;
+//
+// 15 s, comme demandé au rapport de test : c'est plus rapide que ce qu'un
+// boîtier solaire enverra jamais, mais c'est le délai qui permet de VOIR le
+// système réagir, ce qui compte autant. Le sondage est suspendu dès que
+// l'application passe en arrière-plan — sinon on viderait la batterie et le
+// forfait data d'un agriculteur pour rien.
+const RAFRAICHISSEMENT_MS = 15_000;
 
 export default function HomeScreen() {
   const { colors } = useAppTheme();
@@ -113,14 +119,36 @@ export default function HomeScreen() {
   }, [parcel]);
 
   useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const demarrer = () => {
+      if (timer) return;
+      timer = setInterval(load, RAFRAICHISSEMENT_MS);
+    };
+    const arreter = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+    };
+
     load();
-    const timer = setInterval(load, RAFRAICHISSEMENT_MS);
-    // Revenir sur l'application est le moment où l'on veut des chiffres à jour.
+    demarrer();
+
     const sub = AppState.addEventListener("change", (etat) => {
-      if (etat === "active") load();
+      if (etat === "active") {
+        // Revenir sur l'application est le moment où l'on veut des chiffres
+        // à jour : on recharge tout de suite, puis on reprend le sondage.
+        load();
+        demarrer();
+      } else {
+        // Écran éteint ou app en fond : plus aucune requête. Sonder toutes
+        // les 15 s en arrière-plan coûterait de la batterie et des données
+        // mobiles sans que personne ne regarde l'écran.
+        arreter();
+      }
     });
+
     return () => {
-      clearInterval(timer);
+      arreter();
       sub.remove();
     };
   }, [load]);
@@ -231,28 +259,37 @@ export default function HomeScreen() {
       {snapshot && !horsConnexion ? (
         (() => {
           const vieux = maintenant - snapshot.timestamp > SILENCE_SUSPECT_S;
+          // Un relevé de test doit sauter aux yeux, même s'il est récent :
+          // c'est toute la différence avec les anciennes données de démo,
+          // qui se faisaient passer pour de vraies mesures.
+          const signale = vieux || snapshot.simule;
           return (
             <View
               style={[
                 styles.freshRow,
-                { backgroundColor: vieux ? colors.accentSoft : colors.surface, borderColor: vieux ? colors.accent : colors.border },
+                {
+                  backgroundColor: signale ? colors.accentSoft : colors.surface,
+                  borderColor: signale ? colors.accent : colors.border,
+                },
               ]}
             >
               <Ionicons
-                name={vieux ? "alert-circle-outline" : "radio-outline"}
+                name={snapshot.simule ? "flask-outline" : vieux ? "alert-circle-outline" : "radio-outline"}
                 size={14}
-                color={vieux ? colors.accent : colors.success}
+                color={signale ? colors.accent : colors.success}
               />
               <Text
                 style={{
-                  color: vieux ? colors.accent : colors.textMuted,
+                  color: signale ? colors.accent : colors.textMuted,
                   fontFamily: typography.bodyMedium,
                   fontSize: 12,
                   marginLeft: 6,
                   flex: 1,
                 }}
               >
-                {vieux
+                {snapshot.simule
+                  ? `Relevé de TEST ${ageRelatif(snapshot.timestamp, maintenant)} — valeurs générées, pas une mesure du terrain.`
+                  : vieux
                   ? `Dernier relevé ${ageRelatif(snapshot.timestamp, maintenant)} — le boîtier n'a rien envoyé depuis.`
                   : `Relevé reçu ${ageRelatif(snapshot.timestamp, maintenant)} · mise à jour automatique`}
               </Text>

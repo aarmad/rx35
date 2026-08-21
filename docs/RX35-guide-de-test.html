@@ -200,10 +200,18 @@
   <li>Sur votre PC, ouvrez <b>PowerShell</b> et collez ceci en remplaçant la clé :</li>
 </ol>
 
-<pre><span class="c"># Envoyer un relevé de capteurs</span>
+<div class="encart alerte">
+  <div class="titre">Changez les valeurs à chaque envoi</div>
+  <p>La commande ci-dessous tire un nombre au hasard pour l'humidité du sol. C'est volontaire : lors du premier test, la même commande avait été renvoyée telle quelle plusieurs fois, avec les mêmes chiffres — l'écran semblait donc figé alors que l'application affichait fidèlement la dernière mesure reçue.</p>
+</div>
+
+<pre><span class="c"># Envoyer un relevé — l'humidité change à chaque exécution</span>
 $cle = "COLLEZ-VOTRE-CLE-ICI"
-$corps = @{ temperatureC=31.2; humidityAirPct=58; soilMoisturePct=27;
-            waterLevelPct=64; soilPh=6.3; batteryPct=91; lux=920 } | ConvertTo-Json
+$corps = @{ temperatureC=[math]::Round(28+(Get-Random -Max 60)/10,1)
+            humidityAirPct=(Get-Random -Min 50 -Max 80)
+            soilMoisturePct=(Get-Random -Min 20 -Max 75)
+            waterLevelPct=(Get-Random -Min 10 -Max 95)
+            soilPh=6.3; batteryPct=91; lux=920 } | ConvertTo-Json
 Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/sensors' -Method Post `
   -Headers @{ 'X-Device-Key' = $cle } `
   -ContentType 'application/json; charset=utf-8' -Body $corps -TimeoutSec 120</pre>
@@ -214,7 +222,7 @@ Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Pos
   -Headers @{ 'X-Device-Key' = $cle } `
   -ContentType 'application/json; charset=utf-8' -Body $corps -TimeoutSec 120</pre>
 
-<p>Relancez la première commande plusieurs fois en changeant <code>soilMoisturePct</code> (46, puis 43, puis 39…) : la courbe de l'Historique se dessinera.</p>
+<p>Relancez la première commande cinq ou six fois : la courbe de l'Historique se dessinera, et l'accueil suivra tout seul en moins d'une minute.</p>
 <p>Types d'alerte acceptés : <code>mouvement</code>, <code>niveau_eau</code>, <code>alarme</code>, <code>badge_refuse</code>, <code>info</code>.</p>
 
 <div class="saut"></div>
@@ -231,6 +239,44 @@ Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Pos
     <tr><td class="case">☐</td><td>Fermer complètement l'app, la rouvrir</td><td>Vous restez connecté — pas de nouvelle saisie du mot de passe</td></tr>
     <tr><td class="case">☐</td><td>Mauvais mot de passe</td><td>« Numéro ou mot de passe incorrect » — le message ne dit pas si le numéro existe</td></tr>
     <tr><td class="case">☐</td><td>Réglages → Compte : changer votre nom, ajouter votre e-mail</td><td>Enregistré ; un e-mail mal formé est refusé</td></tr>
+  </tbody>
+</table>
+
+<h3>Fraîcheur des données et conseils <span style="color:var(--ocre)">(nouveau)</span></h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Regarder la ligne juste sous le titre de l'accueil</td><td>« Relevé reçu il y a X min · mise à jour automatique » — l'âge de la mesure, pas seulement sa valeur</td></tr>
+    <tr><td class="case">☐</td><td>Envoyer un relevé depuis le PC, puis <b>attendre sans rien toucher</b></td><td>L'accueil se met à jour seul en moins d'une minute</td></tr>
+    <tr><td class="case">☐</td><td>Quitter l'app, la rouvrir</td><td>Rafraîchissement immédiat au retour au premier plan</td></tr>
+    <tr><td class="case">☐</td><td>Ne rien envoyer pendant plus de 3 heures</td><td>La ligne passe en ocre : « le boîtier n'a rien envoyé depuis » — c'est ce silence qui donnait l'impression d'une app figée</td></tr>
+    <tr><td class="case">☐</td><td>Lire la section « Que faire maintenant »</td><td>Des conseils classés : rouge = urgent, ocre = important</td></tr>
+    <tr><td class="case">☐</td><td>Toucher un conseil pour le déplier</td><td>« Sur quoi repose ce conseil » : les mesures exactes qui l'ont déclenché, seuil de la culture compris</td></tr>
+    <tr><td class="case">☐</td><td>Envoyer une humidité très basse (ex. 20 %)</td><td>Un conseil d'irrigation apparaît — ou un conseil d'attendre si de la pluie est annoncée</td></tr>
+    <tr><td class="case">☐</td><td>Envoyer <code>waterLevelPct=5</code></td><td>« Réservoir presque vide », marqué urgent</td></tr>
+    <tr><td class="case">☐</td><td>Changer la culture (Réglages) pour <b>riz</b> et renvoyer la même humidité</td><td>Les conseils changent : le riz demande bien plus d'eau que la tomate</td></tr>
+  </tbody>
+</table>
+
+<h3>Thème jour / nuit <span style="color:var(--ocre)">(nouveau)</span></h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Toucher l'icône lune (ou soleil) en haut à droite</td><td>Toute l'application bascule immédiatement</td></tr>
+    <tr><td class="case">☐</td><td>Fermer complètement l'app et la rouvrir</td><td>Le thème choisi est <b>conservé</b></td></tr>
+    <tr><td class="case">☐</td><td>Réglages → Apparence</td><td>Le choix à trois positions (Clair / Sombre / Automatique) reste disponible</td></tr>
+  </tbody>
+</table>
+
+<h3>Diagnostic hors connexion <span style="color:var(--ocre)">(nouveau)</span></h3>
+<table>
+  <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
+  <tbody>
+    <tr><td class="case">☐</td><td>Mode avion, puis demander à l'Assistant « mes feuilles du bas jaunissent »</td><td>Une fiche du guide embarqué : symptômes, causes probables, quoi faire — pas un message d'erreur</td></tr>
+    <tr><td class="case">☐</td><td>Lire l'avertissement en tête de la réponse</td><td>« Ce sont des pistes à partir de symptômes, pas un diagnostic de VOS mesures »</td></tr>
+    <tr><td class="case">☐</td><td>Essayer « la plante fane mais le sol est humide », « petits insectes collants »</td><td>Chaque fois la fiche correspondante</td></tr>
+    <tr><td class="case">☐</td><td>Poser une question hors sujet en mode avion</td><td>L'app dit qu'aucune fiche ne correspond — elle n'invente rien</td></tr>
+    <tr><td class="case">☐</td><td>Rétablir le réseau et reposer la question</td><td>L'assistant IA répond en citant vos vraies mesures</td></tr>
   </tbody>
 </table>
 
@@ -327,7 +373,7 @@ Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Pos
 <table>
   <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
   <tbody>
-    <tr><td class="case">☐</td><td>Ouvrir la Carte satellite, changer de date</td><td>La grille NDVI se recalcule ; la légende explique les cinq zones</td></tr>
+    <tr><td class="case">☐</td><td>Ouvrir la Carte satellite, changer de date</td><td>La grille de couleurs <b>s'affiche</b> (elle apparaissait vide au premier test) et se recalcule à chaque date</td></tr>
     <tr><td class="case">☐</td><td>Lire la note sous la carte</td><td>Elle dit honnêtement si l'image vient de Sentinel-2 ou si elle est simulée</td></tr>
     <tr><td class="case">☐</td><td>Réglages → Apparence : Clair / Sombre / Automatique</td><td>Toute l'application suit, y compris après redémarrage</td></tr>
     <tr><td class="case">☐</td><td>Réglages → À propos</td><td>L'adresse du serveur réellement utilisée s'affiche</td></tr>
@@ -335,7 +381,39 @@ Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Pos
   </tbody>
 </table>
 
-<h2>5. Ce qui n'est pas un bug</h2>
+<h2>5. Réponses au premier rapport de test</h2>
+
+<table>
+  <thead><tr><th class="quoi">Ce qui avait été observé</th><th>Ce qui se passait réellement, et ce qui a changé</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Données statiques</b><br>Humidité bloquée à 27 %</td>
+      <td>Vérification faite en base : les <b>4 seuls relevés existants</b> dataient de la veille, et 27 % était bien le dernier. Aucun envoi PowerShell n'avait abouti — la commande du guide contenait des valeurs fixes, donc la réécrire à l'identique ne changeait rien. <b>Corrigé des deux côtés :</b> la commande tire désormais des valeurs au hasard, et l'accueil affiche l'âge du relevé et se rafraîchit seul.</td>
+    </tr>
+    <tr>
+      <td><b>Capteurs insensibles</b><br>Aucune variation</td>
+      <td>Même cause. La preuve que la chaîne fonctionnait était d'ailleurs dans votre propre capture : la courbe de luminosité montait de 780 à 920 lux, soit exactement les deux valeurs envoyées. <b>Ce qui manquait</b> n'était pas la réactivité mais l'information : rien ne disait que la mesure datait de 25 heures. C'est maintenant affiché, et un conseil « Le boîtier ne répond plus » apparaît.</td>
+    </tr>
+    <tr>
+      <td><b>Carte satellite vide</b></td>
+      <td><b>Vrai défaut, corrigé.</b> Les données étaient bonnes côté serveur (grille 8 × 6, zones 1 à 5), mais les cellules étaient dimensionnées en pourcentage combiné à <code>aspectRatio</code> — une combinaison dont la hauteur reste à zéro sur plusieurs téléphones Android. Elles sont désormais calculées en pixels.</td>
+    </tr>
+    <tr>
+      <td><b>Données satellite simulées</b></td>
+      <td>Exact, et toujours le cas : il manque des identifiants Copernicus. Ils sont <b>gratuits</b> — dites-le-moi et je les branche. L'application affiche honnêtement qu'il s'agit d'une simulation plutôt que de faire passer ces zones pour une image réelle.</td>
+    </tr>
+    <tr>
+      <td><b>Détection présence / animal</b></td>
+      <td>Le circuit logiciel complet est en place et testé : le boîtier envoie l'alerte, l'application la reçoit et déclenche une notification en une dizaine de secondes. Ce qui manque est le <b>capteur PIR physique</b> sur l'ESP32 — aucun code ne peut le remplacer. Un conseil « Passages répétés détectés » apparaît désormais après 3 détections en 48 h.</td>
+    </tr>
+    <tr>
+      <td><b>Assistant IA : fonctionnel</b></td>
+      <td>Confirmé. Il gagne un repli hors connexion et un historique de conversation par parcelle (celui-ci existait déjà et est conservé en base).</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>6. Ce qui n'est pas un bug</h2>
 
 <div class="encart alerte">
   <div class="titre">Mot de passe oublié : indisponible pour l'instant</div>
@@ -355,7 +433,7 @@ Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Pos
   </tbody>
 </table>
 
-<h2>6. Si quelque chose ne marche pas</h2>
+<h2>7. Si quelque chose ne marche pas</h2>
 
 <ol>
   <li><b>Vérifiez le serveur</b> : ouvrez <code>https://rx35.onrender.com/health</code> dans le navigateur du téléphone. Si vous ne voyez pas <code>{"ok":true}</code>, le problème vient du serveur, pas de l'application.</li>
@@ -370,7 +448,7 @@ Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Pos
 </div>
 
 <div class="fin">
-  RX35 · RX Stack, Lomé · Application 0.1.0 · Guide établi le 20 août 2026.
+  RX35 · RX Stack, Lomé · Application 0.1.0 · Guide mis à jour le 21 août 2026.
   Fonctionnalités vérifiées sur émulateur Android 16 avant livraison : connexion, mesures réelles,
   notifications d'alerte, cache hors connexion, assistant IA, cloisonnement entre comptes.
 </div>

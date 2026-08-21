@@ -86,6 +86,13 @@ export interface ContexteParcelle {
 }
 
 const SILENCE_BOITIER_S = 3 * 3600;
+
+// Le stade sert de clé technique ; à l'écran il faut du français correct.
+const LIBELLE_STADE: Record<Stade, string> = {
+  levee: "levée",
+  croissance: "croissance",
+  maturation: "maturation",
+};
 const un = (n: number, d = 0) => n.toFixed(d);
 
 /**
@@ -162,7 +169,7 @@ export function construireRecommandations(ctx: ContexteParcelle): Recommandation
           "Irriguer maintenant reviendrait à gaspiller de l'eau et à risquer un excès. Contrôlez à nouveau après l'averse ; " +
           "si elle ne tombe pas, irriguez.",
         fondement: [
-          `Humidité du sol : ${un(d.soilMoisturePct)} % (seuil ${ctx.culture} en ${stade} : ${seuilHumidite} %)`,
+          `Humidité du sol : ${un(d.soilMoisturePct)} % (seuil ${ctx.culture} en ${LIBELLE_STADE[stade]} : ${seuilHumidite} %)`,
           `Pluie prévue le ${pluie.date} : ${un(pluie.pluieMm, 1)} mm`,
         ],
       });
@@ -178,7 +185,7 @@ export function construireRecommandations(ctx: ContexteParcelle): Recommandation
             ? "Le mode automatique devrait déclencher la pompe ; vérifiez qu'elle tourne effectivement."
             : "Vous êtes en pilotage manuel : démarrez la pompe depuis l'accueil."),
         fondement: [
-          `Humidité du sol : ${un(d.soilMoisturePct)} % (seuil ${ctx.culture} en ${stade} : ${seuilHumidite} %)`,
+          `Humidité du sol : ${un(d.soilMoisturePct)} % (seuil ${ctx.culture} en ${LIBELLE_STADE[stade]} : ${seuilHumidite} %)`,
           "Aucune pluie ≥ 5 mm prévue sous 48 h",
           `Mode d'irrigation : ${ctx.irrigation.irrigationMode}`,
         ],
@@ -273,7 +280,7 @@ export function construireRecommandations(ctx: ContexteParcelle): Recommandation
         "Signe à surveiller : jaunissement des vieilles feuilles en premier.",
       fondement: [
         `Azote : ${un(ctx.npk.nitrogenMgKg)} mg/kg (minimum conseillé : ${seuils.azoteMin} mg/kg)`,
-        `Stade : ${stade} (jour ${jours})`,
+        `Stade : ${LIBELLE_STADE[stade]} (jour ${jours})`,
       ],
     });
   }

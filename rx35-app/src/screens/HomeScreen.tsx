@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, AppState } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "@/components/Screen";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -14,10 +14,11 @@ import {
   setPumpManual,
   getGrowthStage,
   getWeather,
+  getRecommandations,
 } from "@/services/api";
 import { avecCache } from "@/services/cache";
 import { useParcel } from "@/parcels/ParcelContext";
-import { SensorSnapshot, WeatherDay } from "@/services/types";
+import { Recommandation, SensorSnapshot, WeatherDay } from "@/services/types";
 
 // Seuils indicatifs pour l'affichage (répliqués du firmware, à terme fournis
 // par le backend une fois la synchronisation en place — voir irrigation.cpp).
@@ -27,6 +28,25 @@ function formatDate(epoch: number): string {
   const d = new Date(epoch * 1000);
   return `${d.toLocaleDateString("fr-FR")} à ${d.getHours()}h${String(d.getMinutes()).padStart(2, "0")}`;
 }
+
+/** « il y a 3 min », « il y a 2 h », « il y a 4 j ». */
+function ageRelatif(epoch: number, maintenant: number): string {
+  const s = Math.max(0, maintenant - epoch);
+  if (s < 90) return "à l'instant";
+  const min = Math.round(s / 60);
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `il y a ${h} h`;
+  return `il y a ${Math.round(h / 24)} j`;
+}
+
+// Au-delà de ce délai, le silence du boîtier devient l'information
+// importante : mieux vaut le dire que laisser croire à une mesure fraîche.
+const SILENCE_SUSPECT_S = 3 * 3600;
+
+// L'écran se rafraîchit seul : un agriculteur qui surveille son irrigation
+// ne doit pas avoir à deviner si ce qu'il voit est encore d'actualité.
+const RAFRAICHISSEMENT_MS = 60_000;
 
 export default function HomeScreen() {
   const { colors } = useAppTheme();
@@ -40,6 +60,9 @@ export default function HomeScreen() {
   const [horsConnexion, setHorsConnexion] = useState<number | null>(null);
   const [sansReleve, setSansReleve] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [maintenant, setMaintenant] = useState(() => Date.now() / 1000);
+  const [conseils, setConseils] = useState<Recommandation[]>([]);
+  const [conseilOuvert, setConseilOuvert] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!parcel) return;
@@ -72,6 +95,15 @@ export default function HomeScreen() {
         setSansReleve(true);
         setHorsConnexion(irrigation.horsConnexion ? irrigation.savedAt ?? null : null);
       }
+      // Les conseils sont mis en cache eux aussi : hors connexion, mieux
+      // vaut le dernier avis connu que pas d'avis du tout.
+      try {
+        const r = await avecCache(`${parcel.id}:conseils`, () => getRecommandations(parcel.id));
+        setConseils(r.data);
+      } catch {
+        setConseils([]);
+      }
+
       setError(null);
     } catch (err: any) {
       // Backend injoignable ou en erreur : on l'affiche au lieu de laisser
@@ -82,7 +114,22 @@ export default function HomeScreen() {
 
   useEffect(() => {
     load();
+    const timer = setInterval(load, RAFRAICHISSEMENT_MS);
+    // Revenir sur l'application est le moment où l'on veut des chiffres à jour.
+    const sub = AppState.addEventListener("change", (etat) => {
+      if (etat === "active") load();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
   }, [load]);
+
+  // Fait vieillir l'affichage « il y a X » sans attendre le prochain appel réseau.
+  useEffect(() => {
+    const t = setInterval(() => setMaintenant(Date.now() / 1000), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -176,6 +223,128 @@ export default function HomeScreen() {
             Aucun relevé pour l'instant. Ajoutez un boîtier dans Réglages, puis recopiez sa clé dans le firmware.
           </Text>
         </View>
+      ) : null}
+
+      {/* Âge du relevé. Sans cette ligne, un écran affichant une mesure
+          vieille de deux jours est indiscernable d'un écran à jour : c'est
+          exactement ce qui fait croire à une application « figée ». */}
+      {snapshot && !horsConnexion ? (
+        (() => {
+          const vieux = maintenant - snapshot.timestamp > SILENCE_SUSPECT_S;
+          return (
+            <View
+              style={[
+                styles.freshRow,
+                { backgroundColor: vieux ? colors.accentSoft : colors.surface, borderColor: vieux ? colors.accent : colors.border },
+              ]}
+            >
+              <Ionicons
+                name={vieux ? "alert-circle-outline" : "radio-outline"}
+                size={14}
+                color={vieux ? colors.accent : colors.success}
+              />
+              <Text
+                style={{
+                  color: vieux ? colors.accent : colors.textMuted,
+                  fontFamily: typography.bodyMedium,
+                  fontSize: 12,
+                  marginLeft: 6,
+                  flex: 1,
+                }}
+              >
+                {vieux
+                  ? `Dernier relevé ${ageRelatif(snapshot.timestamp, maintenant)} — le boîtier n'a rien envoyé depuis.`
+                  : `Relevé reçu ${ageRelatif(snapshot.timestamp, maintenant)} · mise à jour automatique`}
+              </Text>
+            </View>
+          );
+        })()
+      ) : null}
+
+      {/* Conseils agronomiques : la réponse à « qu'est-ce que je fais
+          maintenant ? ». Placés avant les chiffres bruts, parce que c'est
+          la décision qui compte, pas la mesure. Chaque conseil s'ouvre sur
+          les mesures exactes qui l'ont déclenché : l'agriculteur doit
+          pouvoir juger, pas obéir. */}
+      {conseils.length > 0 ? (
+        <>
+          <Text style={[styles.sectionLabel, { color: colors.text, fontFamily: typography.bodySemiBold }]}>
+            Que faire maintenant
+          </Text>
+          {conseils.map((c) => {
+            const teinte =
+              c.priorite === "urgent" ? colors.danger : c.priorite === "important" ? colors.accent : colors.textMuted;
+            const ouvert = conseilOuvert === c.id;
+            return (
+              <Pressable
+                key={c.id}
+                onPress={() => setConseilOuvert(ouvert ? null : c.id)}
+                style={[styles.conseilCard, { backgroundColor: colors.surface, borderColor: teinte }]}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Ionicons
+                    name={
+                      c.priorite === "urgent"
+                        ? "alert-circle"
+                        : c.priorite === "important"
+                        ? "information-circle-outline"
+                        : "leaf-outline"
+                    }
+                    size={18}
+                    color={teinte}
+                  />
+                  <Text
+                    style={{
+                      color: colors.text,
+                      fontFamily: typography.bodySemiBold,
+                      fontSize: 14,
+                      marginLeft: 8,
+                      flex: 1,
+                    }}
+                  >
+                    {c.titre}
+                  </Text>
+                  <Ionicons name={ouvert ? "chevron-up" : "chevron-down"} size={16} color={colors.textMuted} />
+                </View>
+                <Text
+                  style={{
+                    color: colors.textMuted,
+                    fontFamily: typography.body,
+                    fontSize: 13,
+                    marginTop: 6,
+                    lineHeight: 19,
+                  }}
+                >
+                  {c.detail}
+                </Text>
+                {ouvert ? (
+                  <View style={[styles.fondement, { borderTopColor: colors.border }]}>
+                    <Text
+                      style={{
+                        color: colors.textMuted,
+                        fontFamily: typography.bodySemiBold,
+                        fontSize: 11,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        marginBottom: 4,
+                      }}
+                    >
+                      Sur quoi repose ce conseil
+                    </Text>
+                    {c.fondement.map((f, i) => (
+                      <Text
+                        key={i}
+                        style={{ color: colors.textMuted, fontFamily: typography.body, fontSize: 12, lineHeight: 18 }}
+                      >
+                        • {f}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </>
       ) : null}
 
       {snapshot ? (
@@ -307,6 +476,23 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     padding: spacing.sm,
     marginBottom: spacing.md,
+  },
+  conseilCard: {
+    borderWidth: 1,
+    borderLeftWidth: 3,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  fondement: { marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1 },
+  freshRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.sm,
   },
   errorCard: {
     borderWidth: 1,

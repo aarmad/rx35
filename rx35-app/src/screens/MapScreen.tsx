@@ -34,6 +34,19 @@ export default function MapScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [horsConnexion, setHorsConnexion] = useState(false);
+  // Largeur réelle de la carte, mesurée à l'affichage. Les cellules étaient
+  // dimensionnées en pourcentage + aspectRatio : sur plusieurs téléphones
+  // Android la hauteur restait à zéro et la grille apparaissait vide. On
+  // calcule donc des pixels, ce qui ne dépend d'aucune subtilité de moteur
+  // de mise en page.
+  const [largeurGrille, setLargeurGrille] = useState(0);
+
+  // Nombre de colonnes déduit des données plutôt que codé en dur : le
+  // backend peut renvoyer une grille d'une autre taille.
+  const colonnes = snapshot?.grid?.length
+    ? Math.max(...snapshot.grid.map((c) => c.col)) + 1
+    : 8;
+  const cote = largeurGrille > 0 ? largeurGrille / colonnes : 0;
 
   useEffect(() => {
     (async () => {
@@ -111,13 +124,21 @@ export default function MapScreen() {
         ) : loading || !snapshot ? (
           <ActivityIndicator color={colors.primary} style={{ paddingVertical: spacing.xxl }} />
         ) : (
-          <View style={styles.grid}>
-            {snapshot.grid.map((cell) => (
-              <View
-                key={`${cell.row}-${cell.col}`}
-                style={[styles.cell, { backgroundColor: ZONE_COLORS[cell.zone] }]}
-              />
-            ))}
+          <View style={styles.grid} onLayout={(e) => setLargeurGrille(e.nativeEvent.layout.width)}>
+            {cote > 0
+              ? snapshot.grid.map((cell) => (
+                  <View
+                    key={`${cell.row}-${cell.col}`}
+                    style={{
+                      width: cote,
+                      height: cote,
+                      // Une zone inconnue ne doit pas produire une case
+                      // invisible : on la rend visiblement neutre.
+                      backgroundColor: ZONE_COLORS[cell.zone] ?? colors.border,
+                    }}
+                  />
+                ))
+              : null}
           </View>
         )}
       </View>
@@ -160,8 +181,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     overflow: "hidden",
   },
-  grid: { flexDirection: "row", flexWrap: "wrap" },
-  cell: { width: `${100 / 8}%`, aspectRatio: 1 },
+  grid: { flexDirection: "row", flexWrap: "wrap", width: "100%" },
   noteText: { fontSize: 12, marginBottom: spacing.lg, lineHeight: 17 },
   sectionLabel: { fontSize: 14, marginBottom: spacing.sm },
   legendCard: { borderRadius: radius.md, borderWidth: 1, padding: spacing.md },

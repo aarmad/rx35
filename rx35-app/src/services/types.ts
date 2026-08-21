@@ -101,3 +101,13 @@ export interface NdviSnapshot {
   // (voir rx35-backend/src/services/satelliteService.ts).
   source: "sentinel-hub" | "simule";
 }
+
+/** Conseil agronomique calculé par le backend (règles déterministes). */
+export interface Recommandation {
+  id: string;
+  priorite: "urgent" | "important" | "info";
+  titre: string;
+  detail: string;
+  /** Les mesures exactes qui ont déclenché la règle. */
+  fondement: string[];
+}

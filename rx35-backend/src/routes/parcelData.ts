@@ -27,6 +27,7 @@ import {
 import { requireRole } from "../middleware/auth";
 import { fetchWeather } from "../services/weatherService";
 import { getNdviSnapshot, getAvailableNdviDates } from "../services/satelliteService";
+import { construireRecommandations } from "../services/agronomie";
 import { askAssistant, diagnosePhoto } from "../services/aiProvider";
 
 // mergeParams : sans cela, :parcelId du routeur parent est invisible ici.
@@ -49,6 +50,44 @@ parcelDataRouter.get("/sensors/history", async (req, res, next) => {
     const period = Number(req.query.period ?? 7);
     const since = Date.now() / 1000 - period * 86400;
     res.json(await getSensorHistory(req.parcelId!, since));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --- Recommandations agronomiques -------------------------------------
+// Croise relevés, tendance, météo et alertes. Règles déterministes : voir
+// l'en-tête de services/agronomie.ts pour le pourquoi.
+parcelDataRouter.get("/recommandations", async (req, res, next) => {
+  try {
+    const parcelId = req.parcelId!;
+    const parcel = await getParcel(parcelId);
+    if (!parcel) return res.status(404).json({ error: "Parcelle introuvable." });
+
+    const depuis = Date.now() / 1000 - 7 * 86400;
+    // La météo dépend d'un service externe : son échec ne doit pas priver
+    // l'agriculteur des conseils tirés de ses propres capteurs.
+    const [dernier, historique, npk, alertes, irrigation, meteo] = await Promise.all([
+      getLatestSensorSnapshot(parcelId),
+      getSensorHistory(parcelId, depuis),
+      getLatestNpkSnapshot(parcelId),
+      getAlerts(parcelId, req.userId!),
+      getCommands(parcelId),
+      fetchWeather(parcel.latitude, parcel.longitude).catch(() => []),
+    ]);
+
+    res.json(
+      construireRecommandations({
+        culture: parcel.culture,
+        datePlantation: parcel.datePlantation,
+        dernier,
+        historique,
+        npk,
+        meteo,
+        alertes,
+        irrigation,
+      })
+    );
   } catch (e) {
     next(e);
   }

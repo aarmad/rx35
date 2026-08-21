@@ -17,6 +17,7 @@ import {
   ParcelInfo,
   ParcelMember,
   PhotoItem,
+  Recommandation,
   Role,
   SensorSnapshot,
   WeatherDay,
@@ -316,4 +317,14 @@ export async function getGrowthStage(culture: Culture, datePlantation: string): 
 export async function envoiEmailDisponible(): Promise<boolean> {
   const r = await apiFetch<{ email: boolean }>("/api/auth/reset-disponible");
   return r.email;
+}
+
+/**
+ * Conseils agronomiques : croisement des relevés, de la tendance, de la
+ * météo et des alertes. Calculé côté serveur par des règles explicites
+ * (rx35-backend/src/services/agronomie.ts), pas par une IA — un conseil
+ * d'irrigation doit être reproductible et justifié.
+ */
+export async function getRecommandations(parcelId: string): Promise<Recommandation[]> {
+  return apiFetch<Recommandation[]>(`/api/parcels/${parcelId}/recommandations`);
 }

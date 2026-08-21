@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Speech from "expo-speech";
+import { rechercherFiches, FicheDiagnostic } from "@/knowledge/baseConnaissances";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -112,6 +113,34 @@ export default function AssistantScreen() {
     });
   };
 
+  // Mise en forme d'une fiche locale en texte simple : l'affichage des
+  // messages n'interprète pas le Markdown.
+  const reponseHorsLigne = (fiches: FicheDiagnostic[]): string => {
+    const bloc = (f: FicheDiagnostic) =>
+      [
+        f.titre.toUpperCase(),
+        "",
+        "Ce que cela ressemble :",
+        ...f.symptomes.map((s) => `  - ${s}`),
+        "",
+        "Causes probables :",
+        ...f.causesProbables.map((s) => `  - ${s}`),
+        "",
+        "Que faire :",
+        ...f.quoiFaire.map((s) => `  - ${s}`),
+        ...(f.aVerifierDansLApp ? ["", `À vérifier dans l'application : ${f.aVerifierDansLApp}`] : []),
+      ].join("\n");
+
+    return [
+      "Pas de connexion : voici ce que dit le guide embarqué dans l'application.",
+      "Ce sont des pistes à partir de symptômes, pas un diagnostic de VOS mesures.",
+      "",
+      fiches.map(bloc).join("\n\n———\n\n"),
+      "",
+      "Reposez la question une fois le réseau revenu pour une analyse tenant compte de vos relevés.",
+    ].join("\n");
+  };
+
   useEffect(() => {
     getChatHistory(parcel!.id)
       .then(setMessages)
@@ -132,7 +161,23 @@ export default function AssistantScreen() {
       await sendChatMessage(parcel!.id, t);
       setMessages(await getChatHistory(parcel!.id));
     } catch (err: any) {
-      setMessages((prev) => [...prev, systemMessage(err?.message ?? "Assistant indisponible.")]);
+      // Repli hors connexion : plutôt qu'un message d'erreur sec au milieu
+      // d'un champ sans réseau, on cherche dans la base de connaissances
+      // embarquée. Elle est annoncée comme telle pour que l'agriculteur ne
+      // la confonde pas avec une analyse de ses propres mesures.
+      const fiches = rechercherFiches(t, parcel!.culture);
+      if (fiches.length > 0) {
+        setMessages((prev) => [...prev, systemMessage(reponseHorsLigne(fiches))]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          systemMessage(
+            (err?.message ?? "Assistant indisponible.") +
+              "\n\nAucune fiche du guide hors connexion ne correspond à cette question. " +
+              "Décrivez ce que vous voyez (couleur des feuilles, état du sol, insectes) : le guide local pourra peut-être aider."
+          ),
+        ]);
+      }
     } finally {
       setSending(false);
     }

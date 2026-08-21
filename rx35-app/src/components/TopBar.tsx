@@ -12,7 +12,7 @@ import { useParcel } from "@/parcels/ParcelContext";
 // la barre du bas (retour utilisateur : ces deux écrans doivent rester
 // atteignables en un geste depuis n'importe quel onglet).
 export function TopBar() {
-  const { colors } = useAppTheme();
+  const { colors, isDark, toggleTheme } = useAppTheme();
   const navigation = useNavigation<any>();
   const { current: parcel } = useParcel();
   const [unread, setUnread] = useState(0);
@@ -37,6 +37,20 @@ export function TopBar() {
         <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 13, letterSpacing: 1 }}>RX35</Text>
       </View>
       <View style={{ flexDirection: "row" }}>
+        {/* Bascule jour/nuit en un geste : en plein soleil comme de nuit,
+            l'agriculteur doit pouvoir corriger la lisibilité sans aller
+            fouiller dans les Réglages. */}
+        <Pressable
+          onPress={toggleTheme}
+          style={[
+            styles.iconButton,
+            { backgroundColor: colors.surface, borderColor: colors.border, marginRight: spacing.sm },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={isDark ? "Passer au thème clair" : "Passer au thème sombre"}
+        >
+          <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={18} color={colors.text} />
+        </Pressable>
         <Pressable
           onPress={() => navigation.navigate("Alertes")}
           style={[styles.iconButton, { backgroundColor: colors.surface, borderColor: colors.border }]}

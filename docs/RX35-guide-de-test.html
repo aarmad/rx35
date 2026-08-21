@@ -190,7 +190,12 @@
 <h3>Option B — votre propre compte</h3>
 <p>Créez-le depuis l'écran <b>Créer un compte</b>. Il sera vide au départ : passez alors par la section 3 pour lui envoyer des mesures.</p>
 
-<h2>3. Simuler le boîtier depuis votre PC</h2>
+<h2>3. Faire varier les mesures (sans boîtier)</h2>
+
+<h3>Le plus simple : depuis l'application</h3>
+<p><b>Réglages → Tester sans boîtier → Envoyer un relevé de test.</b> Un relevé aux valeurs tirées au hasard est enregistré ; revenez sur l'accueil et il apparaît en moins de 15 secondes, sans rien toucher. Ces relevés sont marqués <b>« Relevé de TEST — valeurs générées, pas une mesure du terrain »</b> : ils ne peuvent pas se faire passer pour de vraies mesures.</p>
+
+<h3>Depuis votre PC, pour choisir les valeurs</h3>
 
 <p>Pour voir l'accueil, l'historique et les notifications se remplir sans matériel :</p>
 
@@ -247,7 +252,8 @@ Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Pos
   <thead><tr><th class="case">✓</th><th class="quoi">Ce que vous faites</th><th>Ce que vous devez voir</th></tr></thead>
   <tbody>
     <tr><td class="case">☐</td><td>Regarder la ligne juste sous le titre de l'accueil</td><td>« Relevé reçu il y a X min · mise à jour automatique » — l'âge de la mesure, pas seulement sa valeur</td></tr>
-    <tr><td class="case">☐</td><td>Envoyer un relevé depuis le PC, puis <b>attendre sans rien toucher</b></td><td>L'accueil se met à jour seul en moins d'une minute</td></tr>
+    <tr><td class="case">☐</td><td><b>Réglages → Envoyer un relevé de test</b>, revenir à l'accueil et <b>attendre sans rien toucher</b></td><td>Les valeurs, l'anneau et les conseils changent seuls en moins de <b>15 s</b></td></tr>
+    <tr><td class="case">☐</td><td>Regarder le bandeau après un relevé de test</td><td>« Relevé de TEST — valeurs générées, pas une mesure du terrain », en ocre</td></tr>
     <tr><td class="case">☐</td><td>Quitter l'app, la rouvrir</td><td>Rafraîchissement immédiat au retour au premier plan</td></tr>
     <tr><td class="case">☐</td><td>Ne rien envoyer pendant plus de 3 heures</td><td>La ligne passe en ocre : « le boîtier n'a rien envoyé depuis » — c'est ce silence qui donnait l'impression d'une app figée</td></tr>
     <tr><td class="case">☐</td><td>Lire la section « Que faire maintenant »</td><td>Des conseils classés : rouge = urgent, ocre = important</td></tr>
@@ -321,6 +327,9 @@ Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Pos
     <tr><td class="case">☐</td><td>Premier lancement</td><td>Android demande l'autorisation d'envoyer des notifications : <b>acceptez</b></td></tr>
     <tr><td class="case">☐</td><td>Application ouverte, déclencher une alerte depuis le PC</td><td>Une notification arrive en moins d'une minute, avec le nom de la parcelle et le message</td></tr>
     <tr><td class="case">☐</td><td>Application en arrière-plan (bouton Accueil), déclencher une alerte, puis revenir dans l'app</td><td>La notification apparaît au retour au premier plan</td></tr>
+    <tr><td class="case">☐</td><td>Envoyer une alerte <code>presence_humaine</code> depuis le PC</td><td>Notification <b>sonore</b>, et un conseil urgent en rouge apparaît sur l'accueil dès la première détection</td></tr>
+    <tr><td class="case">☐</td><td>Envoyer une alerte <code>passage_animal</code></td><td>Notification <b>silencieuse</b> : une chèvre ne doit pas réveiller l'agriculteur la nuit</td></tr>
+    <tr><td class="case">☐</td><td>Envoyer trois <code>passage_animal</code></td><td>Un conseil « Passages d'animaux répétés » apparaît, en ocre et non en rouge</td></tr>
     <tr><td class="case">☐</td><td>Toucher la cloche en haut à droite</td><td>La liste des alertes, la pastille indiquant les non-lues</td></tr>
     <tr><td class="case">☐</td><td>Marquer une alerte comme lue</td><td>La pastille décroît</td></tr>
     <tr><td class="case">☐</td><td>Rouvrir l'app plus tard</td><td><b>Pas de rafale</b> de notifications pour les vieilles alertes</td></tr>
@@ -404,7 +413,7 @@ Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Pos
     </tr>
     <tr>
       <td><b>Détection présence / animal</b></td>
-      <td>Le circuit logiciel complet est en place et testé : le boîtier envoie l'alerte, l'application la reçoit et déclenche une notification en une dizaine de secondes. Ce qui manque est le <b>capteur PIR physique</b> sur l'ESP32 — aucun code ne peut le remplacer. Un conseil « Passages répétés détectés » apparaît désormais après 3 détections en 48 h.</td>
+      <td><b>Alertes graduées ajoutées.</b> Deux nouveaux types : <code>presence_humaine</code> (notification sonore, conseil urgent dès la première détection) et <code>passage_animal</code> (silencieuse, conseil seulement à partir de trois). Réveiller quelqu'un la nuit pour une chèvre le pousserait à couper ses notifications, et il raterait la vraie intrusion. <code>mouvement</code> reste accepté pour un PIR seul, incapable de trancher, et est compté à part. Ce qui manque reste le <b>capteur physique</b> et la caméra de classification — aucun code ne peut les remplacer.</td>
     </tr>
     <tr>
       <td><b>Assistant IA : fonctionnel</b></td>
@@ -448,7 +457,7 @@ Invoke-RestMethod -Uri 'https://rx35.onrender.com/api/device/alerts' -Method Pos
 </div>
 
 <div class="fin">
-  RX35 · RX Stack, Lomé · Application 0.1.0 · Guide mis à jour le 21 août 2026.
+  RX35 · RX Stack, Lomé · Application 0.1.0 · Guide mis à jour le 21 août 2026 (2e révision).
   Fonctionnalités vérifiées sur émulateur Android 16 avant livraison : connexion, mesures réelles,
   notifications d'alerte, cache hors connexion, assistant IA, cloisonnement entre comptes.
 </div>
